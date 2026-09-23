@@ -1,0 +1,14 @@
+{
+  "name": "dev-team",
+  "version": "0.6.0",
+  "description": "Multi-agent development team orchestration - planning pipeline (PRD, research, architecture, project plan, issue estimation) and execution pipeline (code-writer, code-reviewer with security-auditor and bug-hunter)",
+  "author": {
+    "name": "rootwarp",
+    "email": "rootwarp@gmail.com",
+    "url": "https://github.com/rootwarp"
+  },
+  "homepage": "https://github.com/rootwarp/ai-plugins",
+  "repository": "https://github.com/rootwarp/ai-plugins",
+  "license": "MIT",
+  "keywords": ["team", "agents", "planning", "implementation", "code-review", "security-audit", "bug-hunting", "prd", "architecture"]
+}

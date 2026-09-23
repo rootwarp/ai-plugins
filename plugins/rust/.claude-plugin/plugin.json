@@ -1,0 +1,14 @@
+{
+  "name": "rust",
+  "version": "0.5.2",
+  "description": "Rust development tools for Claude Code - includes cargo build, test, clippy, rustfmt, documentation skills and project initialization",
+  "author": {
+    "name": "rootwarp",
+    "email": "rootwarp@gmail.com",
+    "url": "https://github.com/rootwarp"
+  },
+  "homepage": "https://github.com/rootwarp/ai-plugins",
+  "repository": "https://github.com/rootwarp/ai-plugins",
+  "license": "MIT",
+  "keywords": ["rust", "rustlang", "cargo", "development", "build", "test", "clippy", "rustfmt", "documentation"]
+}

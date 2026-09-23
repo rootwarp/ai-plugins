@@ -1,0 +1,36 @@
+{
+  "name": "rootwarp-ai-plugins",
+  "owner": {
+    "name": "rootwarp",
+    "email": "rootwarp@gmail.com"
+  },
+  "metadata": {
+    "description": "Multi-language development tools marketplace for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "go",
+      "source": "./plugins/go",
+      "category": "development",
+      "tags": ["golang", "go", "tdd", "linting", "formatting", "code-style", "documentation", "pkg.go.dev"]
+    },
+    {
+      "name": "rust",
+      "source": "./plugins/rust",
+      "category": "development",
+      "tags": ["rust", "rustlang", "cargo", "tdd", "clippy", "formatting", "code-style", "documentation"]
+    },
+    {
+      "name": "python",
+      "source": "./plugins/python",
+      "category": "development",
+      "tags": ["python", "pytest", "ruff", "mypy", "uv", "tdd", "typing", "linting", "formatting"]
+    },
+    {
+      "name": "dev-team",
+      "source": "./plugins/dev-team",
+      "category": "project-management",
+      "tags": ["multi-agent", "team-orchestration", "dev-plan", "dev-run", "code-review", "security-audit", "bug-hunter", "tdd", "git-worktree"]
+    }
+  ]
+}

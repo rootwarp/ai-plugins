@@ -1,0 +1,14 @@
+{
+  "name": "python",
+  "version": "0.4.1",
+  "description": "Python development tools for Claude Code - includes pytest, ruff, mypy, uv skills and project initialization",
+  "author": {
+    "name": "rootwarp",
+    "email": "rootwarp@gmail.com",
+    "url": "https://github.com/rootwarp"
+  },
+  "homepage": "https://github.com/rootwarp/ai-plugins",
+  "repository": "https://github.com/rootwarp/ai-plugins",
+  "license": "MIT",
+  "keywords": ["python", "development", "pytest", "ruff", "mypy", "uv", "poetry", "typing", "documentation"]
+}

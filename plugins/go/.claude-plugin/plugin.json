@@ -1,0 +1,14 @@
+{
+  "name": "go",
+  "version": "0.6.1",
+  "description": "Go development tools for Claude Code - includes build, test, lint, format, documentation lookup skills and project initialization",
+  "author": {
+    "name": "rootwarp",
+    "email": "rootwarp@gmail.com",
+    "url": "https://github.com/rootwarp"
+  },
+  "homepage": "https://github.com/rootwarp/ai-plugins",
+  "repository": "https://github.com/rootwarp/ai-plugins",
+  "license": "MIT",
+  "keywords": ["go", "golang", "development", "build", "test", "lint", "project-init", "documentation", "godoc"]
+}
