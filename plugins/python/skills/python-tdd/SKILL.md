@@ -49,6 +49,8 @@ Use `conftest.py` for shared fixtures:
 
 ```python
 # tests/conftest.py
+from collections.abc import Iterator
+
 import pytest
 from mypackage.config import Config
 from mypackage.database import Database
@@ -62,7 +64,7 @@ def config() -> Config:
     )
 
 @pytest.fixture
-def db(config: Config) -> Database:
+def db(config: Config) -> Iterator[Database]:
     """Provide test database."""
     database = Database(config.database_url)
     database.create_tables()
@@ -144,16 +146,23 @@ class TestAsyncService:
 
 ## Async Tests
 
-Requires `pytest-asyncio` (`uv add --dev pytest-asyncio`). With `asyncio_mode = "auto"` (see the
-configuration below) every `async def test_*` runs as an asyncio test and no marker is needed;
-in the default strict mode, decorate each one with `@pytest.mark.asyncio`.
+Requires `pytest-asyncio` (ask the user before `uv add --dev pytest-asyncio`). With
+`asyncio_mode = "auto"` (see the configuration below) every `async def test_*` runs as an
+asyncio test and no marker is needed; in the default strict mode, decorate each one with
+`@pytest.mark.asyncio`.
 
 ```python
-async def test_async_fetch():
-    client = AsyncClient()
-    result = await client.fetch("https://api.example.com/data")
-    assert result.status == 200
+from unittest.mock import AsyncMock
+
+async def test_fetch_returns_payload() -> None:
+    fake_client = AsyncMock()
+    fake_client.get.return_value = {"status": "ok"}
+    service = DataService(client=fake_client)
+
+    assert await service.fetch("key") == {"status": "ok"}
 ```
+
+Tests never reach real services; use fakes or `AsyncMock`, or `respx` for httpx transports.
 
 ## Test Coverage
 
@@ -165,15 +174,9 @@ uv run pytest --cov=mypackage --cov-report=term-missing
 uv run pytest --cov=mypackage --cov-fail-under=70
 ```
 
-## pytest.ini / pyproject.toml Configuration
+## pytest Configuration
 
-```toml
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-v --strict-markers --cov=mypackage"
-markers = [
-    "slow: marks tests as slow",
-    "integration: marks tests as integration tests",
-]
-asyncio_mode = "auto"
-```
+Use the canonical `[tool.pytest.ini_options]` from Step 5 of `/python:init-dir` (`testpaths`,
+`--strict-markers`, `slow`/`integration` markers, `--cov`). For async tests also set
+`asyncio_mode = "auto"` there, and only once `pytest-asyncio` is installed; otherwise pytest
+warns about an unknown config option.

@@ -148,7 +148,8 @@ class Container:
 - Use dependency injection for all external dependencies
 - Define protocols in the module that uses them; adapters import the port, never the reverse
 - Test domain logic without infrastructure
-- Use dataclasses or Pydantic for value objects
+- Use dataclasses for domain value objects; keep Pydantic at the adapter boundary (request and
+  response models, settings) and map to domain types there
 - Avoid circular imports between modules
 
 ## Anti-Patterns to Avoid

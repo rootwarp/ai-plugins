@@ -13,13 +13,16 @@ name: python-security
 - Use `secrets` module for cryptographic randomness, not `random`
 - Set appropriate timeouts on HTTP clients and network operations
 - Use TLS/HTTPS for all network communication
-- Run `bandit` (or Ruff's `S` rules) to catch common security issues
-- Keep dependencies updated; audit with `pip-audit`
+- Run Ruff's `S` rules (on in the `/python:init-dir` config) or `uvx bandit` to catch common
+  security issues
+- Keep dependencies updated; audit with `uvx pip-audit` (see Security Scanning)
 - Follow principle of least privilege for file permissions
 - Log security events but never log sensitive data
-- Use `python-dotenv` for local development only, not production
+- Load `.env` files in local development only, not production
 
 ## Input Validation
+
+`EmailStr` needs the `email` extra (`pydantic[email]`, which installs `email-validator`).
 
 ```python
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -60,24 +63,36 @@ result = session.execute(stmt)
 ## Secrets Management
 
 ```python
+import os
 from functools import lru_cache
-from pydantic_settings import BaseSettings
+
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    """Application settings from environment."""
-    database_url: str
-    api_key: str
-    secret_key: str
+    """Application settings from environment variables."""
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = SettingsConfigDict(
+        # Read .env only in local development; production uses real env vars
+        env_file=".env" if os.getenv("APP_ENV") == "dev" else None,
+        env_file_encoding="utf-8",
+    )
+
+    # SecretStr keeps values out of repr() and logs
+    database_url: SecretStr
+    api_key: SecretStr
+    secret_key: SecretStr
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
 
-# Usage
-settings = get_settings()
+# Usage: unwrap only where the secret is consumed
+api_key = get_settings().api_key.get_secret_value()
 ```
+
+With strict mypy, add `plugins = ["pydantic.mypy"]` to `[tool.mypy]`; without it mypy reports
+`Settings()` as missing its required fields.
 
 ## Cryptographic Randomness
 
@@ -132,18 +147,20 @@ async with httpx.AsyncClient(verify=True) as client:
 
 ## Security Scanning
 
+Run the tools one-off with `uvx`; ask the user before adding them as dev dependencies.
+
 ```bash
-# Install security tools as dev dependencies (or run ad hoc with `uvx bandit` / `uvx pip-audit`)
-uv add --dev bandit pip-audit
-
 # Static analysis for security issues
-uv run bandit -r src/
+uvx bandit -r src/
 
-# Check the locked dependencies for known vulnerabilities
-uv export --format requirements-txt --no-emit-project | uv run pip-audit -r /dev/stdin
+# Check the locked dependencies for known vulnerabilities (the export includes hashes, so
+# pip-audit can skip resolving them with pip)
+uv export --format requirements-txt --no-emit-project -o requirements-audit.txt
+uvx pip-audit -r requirements-audit.txt --disable-pip
+rm requirements-audit.txt
 
 # In CI/CD
-uv run bandit -r src/ -f json -o bandit-report.json
+uvx bandit -r src/ -f json -o bandit-report.json
 ```
 
 ## Common Vulnerabilities to Avoid
@@ -153,7 +170,7 @@ uv run bandit -r src/ -f json -o bandit-report.json
 | SQL Injection | Parameterized queries |
 | XSS | Escape output, use templating engines |
 | CSRF | Use CSRF tokens |
-| Path Traversal | Validate file paths, use `pathlib` |
+| Path Traversal | Resolve the path and check it stays under the base directory |
 | Command Injection | Avoid `shell=True`; pass an argument list |
 | Deserialization | Don't unpickle untrusted data |
 | Hardcoded Secrets | Environment variables, secret managers |
@@ -165,4 +182,16 @@ subprocess.run(f"ls {user_input}", shell=True)  # Dangerous!
 
 # Good: no shell, list arguments; "--" stops user input being read as an option
 subprocess.run(["ls", "--", user_input], check=True)
+```
+
+```python
+from pathlib import Path
+
+# Path traversal: resolve, then check containment (pathlib alone does not prevent it)
+def safe_path(base: Path, user_path: str) -> Path:
+    root = base.resolve()
+    candidate = (root / user_path).resolve()
+    if not candidate.is_relative_to(root):
+        raise ValueError(f"path escapes {root}: {user_path}")
+    return candidate
 ```

@@ -20,27 +20,31 @@ project/
 ├── src/
 │   └── mypackage/        # Package code
 │       ├── __init__.py
+│       ├── py.typed      # Marker for typed package
 │       ├── main.py
 │       └── utils.py
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py       # pytest fixtures
-│   └── test_main.py
-└── docs/
+└── tests/
+    ├── __init__.py
+    ├── conftest.py       # pytest fixtures
+    └── test_main.py
 ```
 
-### Flat Layout (Simple projects)
+### Flat Layout (Simple scripts)
+
+What `/python:init-dir` creates for a Simple Script: no package and no build system.
 
 ```
 project/
 ├── pyproject.toml
 ├── README.md
-├── mypackage/
-│   ├── __init__.py
-│   └── main.py
+├── main.py
 └── tests/
+    ├── __init__.py
     └── test_main.py
 ```
+
+Once it needs more than a couple of modules or an installable entry point, move to the src
+layout.
 
 ## Directory Purposes
 
@@ -48,14 +52,14 @@ project/
 |-----------|---------|
 | `src/<package>/` | Source code (src layout) |
 | `tests/` | Test files |
-| `docs/` | Documentation |
+| `docs/` | Documentation (create with the first document) |
 | `scripts/` | Utility scripts |
 | `data/` | Data files (not for secrets) |
 | `.github/` | GitHub Actions workflows |
 
 ## pyproject.toml Configuration
 
-Modern Python projects use `pyproject.toml` as the single configuration file:
+Modern Python projects use `pyproject.toml` as the single configuration file. Project metadata:
 
 ```toml
 [project]
@@ -72,7 +76,6 @@ keywords = ["keyword1", "keyword2"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -81,16 +84,8 @@ dependencies = [
     "pydantic>=2.0",
 ]
 
-[dependency-groups]
-dev = [
-    "pytest>=8.0",
-    "pytest-cov>=4.0",
-    "ruff>=0.4",
-    "mypy>=1.10",
-]
-
 [project.scripts]
-myapp = "mypackage.cli:main"
+myapp = "mypackage.main:main"
 
 [project.urls]
 Homepage = "https://github.com/username/mypackage"
@@ -100,25 +95,14 @@ Repository = "https://github.com/username/mypackage"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/mypackage"]
-
-[tool.ruff]
-line-length = 79
-target-version = "py311"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-v --cov=mypackage"
 ```
+
+Do not add `License ::` classifiers next to a `license` expression; PEP 639 supersedes them and
+setuptools 77+ refuses to build.
+
+For the tool configuration (`[tool.ruff]`, `[tool.mypy]`, `[tool.pytest.ini_options]`) and the
+dev dependency group, use the canonical config in Step 5 of `/python:init-dir`; do not maintain a
+diverging copy.
 
 ## Package Manager: uv
 
@@ -156,7 +140,7 @@ from mypackage.core import process
 from mypackage.models import Config, User
 
 __version__ = "0.1.0"
-__all__ = ["process", "Config", "User"]
+__all__ = ["Config", "User", "process"]
 ```
 
 ```python
@@ -173,7 +157,7 @@ def process(config: Config) -> None:
 ## Rules
 
 - Use `src/` layout for libraries to prevent import confusion
-- Flat layout is acceptable for simple applications
+- Flat layout is acceptable for simple scripts
 - Always include `py.typed` marker for typed packages
 - Keep `__init__.py` minimal; use for re-exports
 - One logical concept per module

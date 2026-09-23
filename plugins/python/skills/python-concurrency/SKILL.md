@@ -7,33 +7,51 @@ name: python-concurrency
 
 ## GIL Implications
 
-Python's Global Interpreter Lock (GIL) has significant implications:
+On the default (GIL) build of CPython:
 
 - **Threading helps for**: I/O-bound tasks (network, disk, sleep)
 - **Threading doesn't help for**: CPU-bound tasks (computation)
 - **Use multiprocessing for**: CPU-bound parallelism
 
+Two newer options change that trade-off:
+
+- **Free-threaded builds** (PEP 703; `python3.14t`, officially supported since 3.14) run threads
+  in parallel, so threads can help CPU-bound work. C extensions must support it, and code that
+  relied on the GIL for safety needs explicit locks. Check with `sys._is_gil_enabled()`.
+- **Subinterpreters** (3.14): `concurrent.futures.InterpreterPoolExecutor` gives each worker its
+  own GIL, a lighter-weight alternative to processes for CPU-bound pure-Python code.
+
 ```python
 # Good for I/O-bound: threading
 import threading
 
+import httpx
+
 def fetch_url(url: str) -> bytes:
-    return requests.get(url).content
+    return httpx.get(url, timeout=10).content
 
 threads = [threading.Thread(target=fetch_url, args=(url,)) for url in urls]
 for t in threads:
     t.start()
 for t in threads:
     t.join()
+```
 
+```python
 # Good for CPU-bound: multiprocessing
 from multiprocessing import Pool
 
 def compute(x: int) -> int:
     return expensive_calculation(x)
 
-with Pool() as pool:
-    results = pool.map(compute, range(1000))
+def main() -> None:
+    with Pool() as pool:
+        results = pool.map(compute, range(1000))
+
+# Required: the spawn (macOS, Windows) and forkserver (Linux default since 3.14) start
+# methods re-import this module in every worker
+if __name__ == "__main__":
+    main()
 ```
 
 ## Threading Primitives
@@ -84,12 +102,14 @@ class RecursiveCounter:
 ```python
 import threading
 
+import httpx
+
 # Limit concurrent connections
 connection_semaphore = threading.Semaphore(10)
 
-def make_request(url: str) -> Response:
+def make_request(url: str) -> httpx.Response:
     with connection_semaphore:
-        return requests.get(url)
+        return httpx.get(url, timeout=10)
 ```
 
 ### Event for Signaling
@@ -116,7 +136,7 @@ from collections import deque
 
 class BoundedQueue:
     def __init__(self, maxsize: int) -> None:
-        self._queue: deque = deque()
+        self._queue: deque[object] = deque()
         self._maxsize = maxsize
         self._condition = threading.Condition()
 
@@ -146,7 +166,7 @@ The standard library provides thread-safe queues:
 import queue
 import threading
 
-work_queue: queue.Queue[Task] = queue.Queue()
+work_queue: queue.Queue[Task | None] = queue.Queue()
 
 def worker() -> None:
     while True:
@@ -179,11 +199,12 @@ for t in threads:
 
 ```python
 import threading
-from typing import TypeVar, Generic
+from typing import Generic, TypeVar
 
 K = TypeVar("K")
 V = TypeVar("V")
 
+# On 3.12+: class ThreadSafeDict[K, V]: (PEP 695) and drop the TypeVars
 class ThreadSafeDict(Generic[K, V]):
     def __init__(self) -> None:
         self._data: dict[K, V] = {}
@@ -234,19 +255,22 @@ class SafeAsyncCounter:
             self.value = current + 1
 ```
 
-### Shared State in Tasks
+### Collecting Results from Tasks
+
+`list.append` between awaits is not a race in asyncio (one thread, no interleaving), but a
+shared module-level list is unordered, leaks across calls, and loses errors. Return results from
+the tasks instead:
 
 ```python
 import asyncio
 
-# Bug: shared mutable state
+# Avoid: shared mutable state
 results: list[int] = []
 
 async def fetch_and_append(url: str) -> None:
-    result = await fetch(url)
-    results.append(result)  # Not atomic!
+    results.append(await fetch(url))  # completion order, global state
 
-# Fix: collect results from tasks
+# Prefer: TaskGroup keeps input order and propagates errors
 async def fetch_all(urls: list[str]) -> list[int]:
     async with asyncio.TaskGroup() as tg:
         tasks = [tg.create_task(fetch(url)) for url in urls]
@@ -268,16 +292,47 @@ semaphore = asyncio.Semaphore(10)
 async with semaphore:
     await limited_operation()
 
-# Event
+# Event: one task waits, another calls event.set()
 event = asyncio.Event()
 await event.wait()
-event.set()
 
 # Queue
-queue: asyncio.Queue[Task] = asyncio.Queue()
-await queue.put(task)
-task = await queue.get()
+queue: asyncio.Queue[Job] = asyncio.Queue()
+await queue.put(job)
+job = await queue.get()
 ```
+
+## Cancellation and Timeouts
+
+Cancellation is delivered as `asyncio.CancelledError` at the next `await`. Clean up and let it
+propagate; swallowing it breaks `TaskGroup`, `asyncio.timeout()`, and shutdown.
+
+```python
+import asyncio
+
+async def worker(queue: asyncio.Queue[Job]) -> None:
+    while True:
+        job = await queue.get()
+        try:
+            await process(job)
+        except asyncio.CancelledError:
+            queue.put_nowait(job)  # hand the job back, then re-raise
+            raise
+        finally:
+            queue.task_done()
+
+# Bound a whole block of awaits (3.11+); raises TimeoutError
+async def fetch_with_deadline(url: str) -> bytes:
+    async with asyncio.timeout(5):
+        return await fetch(url)
+```
+
+- Never `except BaseException:` or bare `except:` around awaits without re-raising
+  `CancelledError`; `except Exception:` does not catch it (3.8+)
+- Use `asyncio.shield()` only for work that must finish (e.g. a commit); the caller is still
+  cancelled
+- Cancel background tasks you own on shutdown, or run them inside a `TaskGroup`
+- Start the program with `asyncio.run(main())`, which cancels leftover tasks on exit
 
 ## concurrent.futures
 
@@ -286,8 +341,10 @@ task = await queue.get()
 ```python
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def fetch(url: str) -> Response:
-    return requests.get(url)
+import httpx
+
+def fetch(url: str) -> httpx.Response:
+    return httpx.get(url, timeout=10)
 
 with ThreadPoolExecutor(max_workers=10) as executor:
     # Submit all tasks
@@ -312,26 +369,17 @@ from concurrent.futures import ProcessPoolExecutor
 def compute(x: int) -> int:
     return expensive_calculation(x)
 
-# Note: functions must be picklable (defined at module level)
-with ProcessPoolExecutor() as executor:
-    results = list(executor.map(compute, range(1000)))
+def main() -> None:
+    # Functions and arguments must be picklable (define them at module level)
+    with ProcessPoolExecutor() as executor:
+        results = list(executor.map(compute, range(1000)))
+
+if __name__ == "__main__":  # required for spawn/forkserver start methods
+    main()
 ```
 
-### Context Manager Pattern
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
-from typing import Iterator
-
-@contextmanager
-def managed_executor(max_workers: int = 4) -> Iterator[ThreadPoolExecutor]:
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    try:
-        yield executor
-    finally:
-        executor.shutdown(wait=True)
-```
+Both executors are context managers; `with` calls `shutdown(wait=True)` on exit, so no extra
+wrapper is needed.
 
 ## Common Anti-Patterns
 
@@ -342,20 +390,19 @@ def managed_executor(max_workers: int = 4) -> Iterator[ThreadPoolExecutor]:
 if key not in cache:
     cache[key] = compute()  # Another thread may have set it
 
-# Fix: use setdefault or lock
-with cache_lock:
-    if key not in cache:
-        cache[key] = compute()
+# Misleading: setdefault is atomic, but compute() still runs every time
+value = cache.setdefault(key, compute())
 
-# Or use atomic operation
-value = cache.setdefault(key, compute())  # Still calls compute()
-
-# Best: use locking with double-check
-with cache_lock:
-    if key not in cache:
-        cache[key] = compute()
-    return cache[key]
+# Fix: hold the lock across check and act
+def get_or_compute(key: str) -> Value:
+    with cache_lock:
+        if key not in cache:
+            cache[key] = compute()
+        return cache[key]
 ```
+
+For a process-wide cached value, prefer `functools.cache` on a function over hand-written
+locking.
 
 ### Lazy Initialization Race
 
@@ -420,10 +467,10 @@ async def bad_read_file(path: str) -> str:
 async def good_read_file(path: str) -> str:
     return await asyncio.to_thread(Path(path).read_text)
 
-# Alternative: aiofiles (also thread-backed; convenient for streaming reads)
+# Alternative: aiofiles (third-party, also thread-backed; convenient for streaming reads)
 import aiofiles
 
-async def best_read_file(path: str) -> str:
+async def read_file_aiofiles(path: str) -> str:
     async with aiofiles.open(path) as f:
         return await f.read()
 ```
@@ -435,13 +482,16 @@ async def best_read_file(path: str) -> str:
 Complements (does not replace) the main checklist in the `python-code-style` skill. When the
 changes touch threads, async, multiprocessing, or shared state, also verify:
 
-- [ ] Appropriate concurrency model chosen (threading for I/O, multiprocessing for CPU)
+- [ ] Appropriate concurrency model chosen (threads for I/O; processes, subinterpreters, or a
+  free-threaded build for CPU)
 - [ ] All shared mutable state protected by locks
 - [ ] `threading.Lock` used for threading, `asyncio.Lock` for asyncio
 - [ ] No blocking calls in async functions (use `asyncio.to_thread` or `run_in_executor`)
 - [ ] `queue.Queue` used for thread communication (not bare lists)
 - [ ] Thread/process pools properly shut down (use context managers)
+- [ ] Multiprocessing entry code behind `if __name__ == "__main__":`
+- [ ] `CancelledError` is re-raised after cleanup, never swallowed
 - [ ] No check-then-act patterns without proper locking
-- [ ] Lazy initialization uses double-checked locking
+- [ ] Lazy initialization is locked (double-checked locking or `functools.cache`)
 - [ ] `asyncio.TaskGroup` used for concurrent async tasks (Python 3.11+)
 - [ ] Worker threads/processes have clean shutdown mechanism

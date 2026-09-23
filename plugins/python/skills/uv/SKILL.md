@@ -3,7 +3,7 @@ description: 'Manage Python dependencies with uv (add, remove, sync, update). Us
 name: uv
 ---
 
-# /uv
+# /python:uv
 
 Manage Python dependencies using uv.
 

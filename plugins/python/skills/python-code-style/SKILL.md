@@ -12,7 +12,8 @@ Guide](https://google.github.io/styleguide/pyguide.html).
 ## Formatting
 
 - Use `ruff format` for all formatting - no exceptions
-- **Line length: 79 characters maximum** (PEP 8 standard)
+- **Line length:** follow the project's configured `line-length`; new projects from
+  `/python:init-dir` use 79 (PEP 8). Do not reformat a project to a different limit
 - Use 4 spaces for indentation
 - Use `ruff` for import sorting
 
@@ -52,19 +53,20 @@ from myapp.models import User
 ## Type Hints
 
 - Use type hints for all public functions and methods
-- Use `from __future__ import annotations` for forward references
+- For forward references on Python < 3.14, quote the name or use
+  `from __future__ import annotations`; 3.14 defers annotation evaluation (PEP 649/749), so
+  neither is needed there
 - Prefer built-in generics: `list[str]` over `List[str]` (Python 3.9+)
 - Use `|` for unions: `str | None` over `Optional[str]` (Python 3.10+)
-- Use `TypeAlias` for complex type definitions
+- Use `TypeAlias` for complex type definitions (the `type` statement on 3.12+)
 - Run `mypy` or `pyright` for type checking
 
 ```python
-from __future__ import annotations
-
 from collections.abc import Callable, Sequence
 from typing import TypeAlias
 
-JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+JsonScalar: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
 def process_items(
     items: Sequence[str],
@@ -85,14 +87,14 @@ def process_items(
 
 ```python
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 @dataclass(frozen=True)
 class User:
     id: str
     name: str
     email: str
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def domain(self) -> str:
