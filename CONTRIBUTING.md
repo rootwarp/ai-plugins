@@ -24,3 +24,8 @@ All contributions require at least one review
 before merging. Reviewers will check for
 consistency with existing conventions and
 clarity of the proposed guidelines.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under
+the [MIT License](LICENSE).
