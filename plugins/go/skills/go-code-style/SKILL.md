@@ -70,7 +70,8 @@ management, channel patterns, and sync primitives.
 ## Functions & API Design
 
 - Use `context.Context` as first parameter for functions that do I/O
-- Avoid multiple parameters of the same type in a row
+- Avoid long runs of same-typed parameters that are easy to swap; past two or three, group them
+  in a struct (`Send(ctx, Message{To: ..., Subject: ...})`)
 - Return early with guard clauses (line-of-sight coding)
 - Design APIs that are hard to misuse
 

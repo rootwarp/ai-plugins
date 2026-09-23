@@ -5,8 +5,10 @@ name: go-project-layout
 
 # Project Layout
 
-Follow [golang-standards/project-layout](https://github.com/golang-standards/project-layout)
-conventions.
+Follow the official [Organizing a Go module](https://go.dev/doc/modules/layout) guide. The
+community [golang-standards/project-layout](https://github.com/golang-standards/project-layout)
+repo is not an official standard; borrow its support directories below only when a large service
+needs them.
 
 ## Core Directories
 
@@ -14,7 +16,7 @@ conventions.
 |-----------|---------|
 | `cmd/` | Main applications; one subdirectory per executable |
 | `internal/` | Private code; cannot be imported by external projects |
-| `pkg/` | Public library code safe for external import |
+| `pkg/` | Optional; public library code safe for external import |
 
 ## Service Directories
 
@@ -39,8 +41,9 @@ conventions.
 ## Rules
 
 - Never create `/src` directory - not idiomatic for Go
-- Keep `cmd/` minimal; import logic from `internal/` or `pkg/`
-- Use `internal/` by default; only use `pkg/` when external import is intended
+- Keep `cmd/` minimal; import logic from `internal/` (or the root package of a library)
+- Use `internal/` by default; a library exposes its package at the module root — use `pkg/` only
+  when there are several public packages and a root package is not enough
 - Small projects don't need all directories; start minimal and grow as needed
 - Each `cmd/<app>/` should have its own `main.go`
 
@@ -55,6 +58,17 @@ project/
 │       └── main.go
 ├── internal/
 │   └── app/
+├── go.mod
+└── README.md
+```
+
+A library puts its package at the module root instead:
+
+```
+project/
+├── project.go        # package project
+├── project_test.go
+├── internal/         # only once private helpers exist
 ├── go.mod
 └── README.md
 ```

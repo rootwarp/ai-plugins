@@ -63,9 +63,12 @@ internal/
 │   ├── grpc/         # gRPC handlers (inbound)
 │   └── postgres/     # Database implementation (outbound)
 └── infrastructure/
-    ├── config/       # Configuration loading
-    └── wire/         # Dependency injection
+    └── config/       # Configuration loading
 ```
+
+Wire dependencies by hand in `cmd/<app>/main.go`: build the adapters, pass them to the
+application constructors, hand those to the inbound adapters. No DI framework or code generator
+is needed.
 
 ## Ports and Adapters
 
@@ -87,20 +90,35 @@ Interfaces the use cases need, declared by the package that calls them (normally
 - Cache interfaces
 
 ```go
-// Outbound port (application/ports.go — declared where it is consumed)
-type UserRepository interface {
-    Save(ctx context.Context, user *User) error
-    FindByID(ctx context.Context, id string) (*User, error)
-}
+// application/ports.go — outbound port, declared where it is consumed
+package application
 
-// Adapter implements the port
-type PostgresUserRepository struct {
+type UserRepository interface {
+    Save(ctx context.Context, user *domain.User) error
+    FindByID(ctx context.Context, id string) (*domain.User, error)
+}
+```
+
+```go
+// adapters/postgres/user_repository.go — adapter implements the port
+package postgres
+
+var _ application.UserRepository = (*UserRepository)(nil)
+
+type UserRepository struct {
     db *sql.DB
 }
 
-func (r *PostgresUserRepository) Save(ctx context.Context, user *User) error {
-    // PostgreSQL-specific implementation
+func (r *UserRepository) Save(ctx context.Context, user *domain.User) error {
+    _, err := r.db.ExecContext(ctx,
+        `INSERT INTO users (id, name) VALUES ($1, $2)`, user.ID, user.Name)
+    if err != nil {
+        return fmt.Errorf("save user %s: %w", user.ID, err)
+    }
+    return nil
 }
+
+// FindByID omitted.
 ```
 
 ## Best Practices

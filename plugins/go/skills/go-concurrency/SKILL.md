@@ -39,41 +39,48 @@ func startWorker() {
     }()
 }
 
-// Good: context-based cancellation
-func startWorker(ctx context.Context) {
+// Good: context-based cancellation, and the caller can wait for the exit
+func startWorker(ctx context.Context) <-chan struct{} {
+    done := make(chan struct{})
     go func() {
+        defer close(done)
+        ticker := time.NewTicker(time.Second)
+        defer ticker.Stop()
         for {
             select {
             case <-ctx.Done():
                 return
-            default:
-                process()
+            case <-ticker.C:
+                process(ctx) // long-running work must honor ctx too
             }
         }
     }()
+    return done // caller: cancel(); <-done
 }
 ```
 
+Avoid a `select` with an empty `default:` around the work — it busy-spins and only notices
+cancellation between calls.
+
 ### WaitGroup for Goroutine Completion
+
+Use `WaitGroup.Go` (Go 1.25+); it does the `Add`/`Done` bookkeeping that is easy to misplace:
 
 ```go
 func processItems(items []Item) {
     var wg sync.WaitGroup
-
     for _, item := range items {
-        wg.Add(1)
-        go func(it Item) {
-            defer wg.Done()
-            process(it)
-        }(item) // Pass item as argument to avoid capture bug
+        wg.Go(func() {
+            process(item) // per-iteration variable since Go 1.22
+        })
     }
-
     wg.Wait()
 }
 ```
 
-Go 1.22+ gives each iteration its own loop variable, so the argument is only required when
-`go.mod` declares an older `go` version; it stays harmless either way.
+When `go.mod` declares a `go` version below 1.25, call `wg.Add(1)` before the `go` statement
+and `defer wg.Done()` inside it; below 1.22, also pass the loop variable as an argument (see
+Loop Variable Capture below).
 
 ### errgroup for Goroutines That Can Fail
 
@@ -158,15 +165,19 @@ func multiplex(ctx context.Context, a, b <-chan int, out chan<- int) {
         case v, ok := <-a:
             if !ok {
                 a = nil // Disable this case
-                continue
+                break   // leave the select; the nil check below runs
             }
-            out <- v
+            if !send(ctx, out, v) {
+                return
+            }
         case v, ok := <-b:
             if !ok {
                 b = nil
-                continue
+                break
             }
-            out <- v
+            if !send(ctx, out, v) {
+                return
+            }
         case <-ctx.Done():
             return
         }
@@ -174,6 +185,16 @@ func multiplex(ctx context.Context, a, b <-chan int, out chan<- int) {
         if a == nil && b == nil {
             return
         }
+    }
+}
+
+// send blocks until out accepts v or ctx is cancelled; a bare `out <- v` would ignore ctx.
+func send(ctx context.Context, out chan<- int, v int) bool {
+    select {
+    case out <- v:
+        return true
+    case <-ctx.Done():
+        return false
     }
 }
 ```
@@ -186,8 +207,11 @@ func multiplex(ctx context.Context, a, b <-chan int, out chan<- int) {
 - **Avoid large buffers**: They hide problems; prefer backpressure
 
 ```go
-// Signal channel (size 1)
-done := make(chan struct{}, 1)
+// Done signal: unbuffered, closed by the sender to broadcast
+done := make(chan struct{})
+
+// Non-blocking "wake up" notification (size 1; extra signals coalesce)
+wake := make(chan struct{}, 1)
 
 // Work queue with bounded concurrency
 jobs := make(chan Job, numWorkers)
@@ -238,21 +262,24 @@ func (c *Cache) Set(key string, item Item) {
 }
 ```
 
-### sync.Once for One-Time Initialization
+### sync.OnceValue for Lazy One-Time Initialization
+
+Use it for expensive, process-wide values that are genuinely global (compiled regexps, lookup
+tables). Application dependencies such as config, clients, and repositories are built in `main`
+and passed through constructors instead (see the `go-architecture` skill).
 
 ```go
-var (
-    instance *Config
-    once     sync.Once
-)
+var defaultTable = sync.OnceValue(func() *Table {
+    return buildTable() // runs once, on first call
+})
 
-func GetConfig() *Config {
-    once.Do(func() {
-        instance = loadConfig()
-    })
-    return instance
+func lookup(k string) string {
+    return defaultTable().Get(k)
 }
 ```
+
+`sync.OnceValues` does the same for a `(value, error)` pair; plain `sync.Once` remains for
+side effects without a result.
 
 ### Atomic Operations
 
@@ -276,6 +303,8 @@ func (s *Stats) RecordError() {
 ## Common Anti-Patterns
 
 ### Loop Variable Capture (Pre-Go 1.22)
+
+Only relevant when `go.mod` declares `go` below 1.22:
 
 ```go
 // Bug: all goroutines share the same loop variable
@@ -304,12 +333,18 @@ var cache = make(map[string]int)
 go func() { cache["a"] = 1 }()
 go func() { cache["b"] = 2 }() // Panic: concurrent map writes
 
-// Fix: use sync.Map or mutex
-var cache sync.Map
+// Fix: guard the map with a mutex (the default choice)
+var (
+    mu    sync.Mutex
+    cache = make(map[string]int)
+)
 
-go func() { cache.Store("a", 1) }()
-go func() { cache.Store("b", 2) }()
+go func() { mu.Lock(); cache["a"] = 1; mu.Unlock() }()
+go func() { mu.Lock(); cache["b"] = 2; mu.Unlock() }()
 ```
+
+Reach for `sync.Map` only for its documented cases: keys written once and read many times, or
+goroutines working on disjoint key sets.
 
 ### Check-Then-Act Race
 
@@ -360,10 +395,13 @@ changes touch goroutines, channels, or shared state, also verify:
 - [ ] Every goroutine has a clear shutdown mechanism (context, done channel, or WaitGroup)
 - [ ] Channels are closed only by senders
 - [ ] No shared maps/slices accessed without synchronization
+- [ ] `WaitGroup.Go` used (Go 1.25+), or `wg.Add` called before the `go` statement
 - [ ] Loop variables are not captured in goroutines (or `go.mod` declares Go 1.22+)
 - [ ] Mutex/RWMutex used appropriately (RWMutex only for read-heavy workloads)
 - [ ] No check-then-act patterns without proper locking
 - [ ] Slices/maps copied at API boundaries
 - [ ] Channel buffer sizes are justified (prefer unbuffered or size-1)
-- [ ] `sync.Once` used for lazy initialization of singletons
+- [ ] Lazy one-time init uses `sync.OnceValue`/`sync.Once`, not hand-rolled flags; no global
+      singletons for injectable dependencies
+- [ ] Channel sends inside loops also select on `ctx.Done()`
 - [ ] Goroutines that can fail run under `errgroup` (first error cancels the rest)
