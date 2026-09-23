@@ -1,7 +1,7 @@
 {
   "name": "rust",
-  "version": "0.5.2",
-  "description": "Rust development tools for Claude Code - includes cargo build, test, clippy, rustfmt, documentation skills and project initialization",
+  "version": "0.6.0",
+  "description": "Rust development for Claude Code: cargo build/check/test/clippy/fmt/doc skills, docs.rs lookup, guidance on code style, architecture, concurrency, security, TDD and project layout, and a /rust:init-dir project scaffolder",
   "author": {
     "name": "rootwarp",
     "email": "rootwarp@gmail.com",

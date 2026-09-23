@@ -29,7 +29,7 @@ community best practices.
 | `src/lib.rs` | Public API, re-exports, crate-level docs |
 | `src/error.rs` | Error types and `Result` alias |
 | `src/config.rs` | Configuration types |
-| `src/*/mod.rs` | Module definitions |
+| `src/name.rs` + `src/name/` | Module with submodules (preferred over `src/name/mod.rs`) |
 
 ## Workspace Structure
 
@@ -45,12 +45,17 @@ project/
 │   ├── cli/            # CLI binary
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   └── server/         # Server binary
+│   ├── server/         # Server binary
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   └── integration-tests/  # Cross-crate tests (publish = false), in its own tests/
 │       ├── Cargo.toml
-│       └── src/
-├── tests/              # Workspace-level integration tests
+│       └── tests/
 └── README.md
 ```
+
+A virtual workspace root has no package, so Cargo never compiles a root-level `tests/`; put
+cross-crate tests in a member crate like `integration-tests` above.
 
 Workspace `Cargo.toml`:
 
@@ -70,15 +75,33 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/user/project"
 
 [workspace.dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 serde = { version = "1", features = ["derive"] }
 ```
+
+Members inherit from the workspace instead of repeating values:
+
+```toml
+[package]
+name = "project-core"   # not bare `core`: Cargo warns it clashes with the built-in crate
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+```
+
+Enable only the features a crate uses (`tokio`'s `full` is for applications and quick
+prototypes, never for libraries).
 
 ## Rules
 
 - Keep `src/main.rs` minimal; put logic in `src/lib.rs` or modules
 - Use `src/lib.rs` for re-exports; define types in submodules
-- Use `mod.rs` or `name.rs` consistently (prefer `name.rs` for flat modules)
+- Use `name.rs` + `name/` for modules with submodules; do not mix in `mod.rs` files (sole
+  exception: `tests/common/mod.rs`, which keeps shared test helpers from being built as a test)
 - Integration tests in `tests/` test the public API only
 - Examples should be runnable: `cargo run --example name`
 - Use feature flags for optional functionality
@@ -139,7 +162,9 @@ categories = ["development-tools"]
 
 [features]
 default = []
-full = ["feature1", "feature2"]
+# Each entry must name a real feature or optional dependency, e.g.:
+# json = ["dep:serde_json"]
+# full = ["json"]
 
 [profile.release]
 lto = true

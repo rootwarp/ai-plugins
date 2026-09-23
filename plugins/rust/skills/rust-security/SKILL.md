@@ -10,8 +10,9 @@ name: rust-security
 - Validate and sanitize ALL user input; use strong types
 - Use parameterized queries with `sqlx` or similar to prevent SQL injection
 - Escape output properly to prevent XSS in web applications
-- Use the OS CSPRNG for keys and tokens (`getrandom`, or `rand`'s `OsRng`); never a seeded or
-  thread-local PRNG
+- Generate keys and tokens from a CSPRNG: `getrandom::fill`, `rand::rngs::OsRng` (via
+  `TryRngCore` in rand 0.9), or `rand::rng()` (a reseeding ChaCha CSPRNG); never a
+  deterministically seeded RNG (`StdRng::seed_from_u64`) or a non-crypto one (`SmallRng`)
 - Set appropriate timeouts on network operations
 - Use TLS for all network communication (`rustls` or `native-tls`)
 - Minimize use of `unsafe`; document safety invariants when required
@@ -50,9 +51,19 @@ error — keep the inner block.
 
 ## Dependency Security
 
+First check that the tool is installed:
+
 ```bash
-# Install security audit tool
-cargo install cargo-deny
+cargo deny --version
+```
+
+If it is missing, stop and ask the user before installing anything; suggest
+`cargo install --locked cargo-deny` (or `cargo binstall cargo-deny` for a prebuilt binary). Do
+not install it on your own.
+
+```bash
+# Generate a full, commented deny.toml template (only if none exists; do not overwrite)
+cargo deny init
 
 # Check security advisories, licenses, bans, and sources
 cargo deny check

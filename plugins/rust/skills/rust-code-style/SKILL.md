@@ -52,7 +52,7 @@ use crate::error::Result;
 - Keep traits small and focused (1-3 methods ideal; see the `rust-architecture` skill)
 - Use default implementations where sensible
 - Derive common traits when appropriate: `Debug`, `Clone`, `PartialEq`
-- Prefer composition over trait inheritance
+- Prefer small traits combined via supertrait bounds over one large trait
 - Use extension traits for adding methods to foreign types
 
 ```rust
@@ -149,13 +149,20 @@ patterns, message passing, async considerations, and deadlock prevention.
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
+/// # use my_crate::{parse_config, ConfigError};
 /// let config = parse_config("config.toml")?;
+/// # Ok::<(), ConfigError>(())
 /// ```
-pub fn parse_config(path: &str) -> Result<Config, ConfigError> {
+pub fn parse_config(path: impl AsRef<Path>) -> Result<Config, ConfigError> {
     // ...
 }
 ```
+
+Doc examples are compiled and run by `cargo test`, so they are part of the quality gate: hide
+setup lines with `# `, end a `?`-using example with `# Ok::<(), E>(())`, and mark examples that
+touch the filesystem or network `no_run` (still compiled, not executed). Use `ignore` only for
+code that cannot compile in isolation.
 
 ## Testing
 
@@ -184,7 +191,7 @@ cargo fmt --all
 ### 2. Run Clippy Lints (REQUIRED)
 
 ```bash
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 - All warnings must be resolved (not suppressed without justification)
@@ -194,20 +201,29 @@ cargo clippy --all-targets --all-features -- -D warnings
 ### 3. Run Tests (REQUIRED)
 
 ```bash
-cargo test --all-features
+cargo test --workspace --all-features
 ```
 
 - All tests must pass
 - Do NOT proceed if any test fails
 - Add tests for new functionality
 
+`--workspace` matters when the root manifest is also a package (otherwise only the root crate is
+checked); it is harmless in a single crate. If the crate has mutually exclusive features,
+`--all-features` fails to build: replace it with the explicit supported feature sets, or
+`cargo hack --each-feature` if `cargo-hack` is installed (ask before installing it).
+
 ### 4. Verify Before Commit
 
 Run all checks together:
 
 ```bash
-cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --all-features
+cargo fmt --all --check \
+  && cargo clippy --workspace --all-targets --all-features -- -D warnings \
+  && cargo test --workspace --all-features
 ```
+
+If the project has a `deny.toml`, also run `cargo deny check` (see the `rust-security` skill).
 
 **If any of these commands fail, fix the issues before committing.**
 

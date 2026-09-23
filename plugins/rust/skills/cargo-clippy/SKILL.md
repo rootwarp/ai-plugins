@@ -19,7 +19,7 @@ For the pre-commit gate (all targets and features, warnings denied — the form 
 `rust-code-style` skill requires):
 
 ```bash
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 To fix automatically fixable issues (commit or stash first; `--fix` refuses a dirty tree unless

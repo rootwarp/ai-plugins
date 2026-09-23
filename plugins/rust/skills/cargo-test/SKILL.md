@@ -12,8 +12,11 @@ Run tests for the Rust project.
 Run all tests (the pre-commit gate in `rust-code-style` uses this form):
 
 ```bash
-cargo test --all-features
+cargo test --workspace --all-features
 ```
+
+If `--all-features` fails because features are mutually exclusive, test the supported feature
+sets explicitly (`--features a`, `--no-default-features --features b`).
 
 To see `println!`/`dbg!` output from passing tests:
 

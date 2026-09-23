@@ -16,7 +16,9 @@ name: rust-tdd
 - Use `tests/` directory for integration tests
 - Mock external dependencies using traits and test doubles
 - Aim for meaningful coverage, not 100% coverage
-- When using the `dev-team` plugin, `code-writer` enforces a ≥70% coverage floor for new code
+- When using the `dev-team` plugin, `code-writer` enforces a ≥70% coverage floor for new code;
+  measure it with `cargo llvm-cov` (check `cargo llvm-cov --version` first and ask the user
+  before installing `cargo-llvm-cov`)
 - See the `rust-code-style` skill for the MANDATORY fmt/clippy/test gate that must pass before
   every commit
 
@@ -133,11 +135,25 @@ Place in `tests/` directory:
 
 ```rust
 // tests/api_integration.rs
+use std::net::TcpListener;
+
 use my_crate::Client;
 
+mod common; // shared helpers live in tests/common/mod.rs, which Cargo does not build as a test
+
 #[test]
-fn test_client_connection() {
-    let client = Client::new("localhost:8080");
+fn test_client_ping_local_server_succeeds() {
+    // Bind an ephemeral port in-process; never depend on a server that happens to be running
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || common::serve_one(listener));
+
+    let client = Client::new(addr);
     assert!(client.ping().is_ok());
+    server.join().unwrap();
 }
 ```
+
+Tests that need real external services (database, network API) must not run in the default
+`cargo test` gate: mark them `#[ignore = "needs Postgres"]` and run them explicitly with
+`cargo test -- --ignored`.

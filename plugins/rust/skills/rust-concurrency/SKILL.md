@@ -36,7 +36,8 @@ These marker traits define thread safety:
 | `Rc<T>` | Non-atomic reference counting |
 | `RefCell<T>` | Non-thread-safe interior mutability |
 | `*const T`, `*mut T` | Raw pointers have no safety guarantees |
-| Most iterators | May hold references to non-Send data |
+| `MutexGuard<'_, T>` | Must be unlocked on the thread that locked it |
+| Types containing any of the above | `Send` is an auto trait; one non-`Send` field propagates |
 
 ```rust
 use std::rc::Rc;
@@ -81,17 +82,22 @@ println!("Result: {}", *counter.lock().unwrap());
 ### RwLock for Read-Heavy Workloads
 
 ```rust
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-let cache = Arc::new(RwLock::new(HashMap::new()));
+let cache: Arc<RwLock<HashMap<String, u64>>> = Arc::new(RwLock::new(HashMap::new()));
 
-// Multiple readers allowed
-let cache_read = cache.read().unwrap();
-let value = cache_read.get(&key);
+// Multiple readers allowed; copy the value out so the read guard drops at the end of the scope
+let cached = {
+    let map = cache.read().unwrap();
+    map.get("answer").copied()
+};
 
-// Exclusive write access
-let mut cache_write = cache.write().unwrap();
-cache_write.insert(key, value);
+// Exclusive write access; never call `write()` while this thread still holds a read guard
+// (it deadlocks or panics)
+if cached.is_none() {
+    cache.write().unwrap().insert("answer".to_owned(), 42);
+}
 ```
 
 ### Atomic Operations
@@ -140,9 +146,13 @@ for received in rx {
 }
 ```
 
+For backpressure, `mpsc::sync_channel(n)` gives a bounded channel. Since Rust 1.67 std `mpsc`
+uses crossbeam's implementation, so performance is not a reason to switch.
+
 ### Crossbeam Channels
 
-Prefer `crossbeam-channel` for more features:
+Reach for `crossbeam-channel` when you need `select!` across channels or multi-consumer (MPMC)
+receivers:
 
 ```rust
 use crossbeam_channel::{bounded, select, unbounded};
@@ -168,20 +178,35 @@ faster, and this is Tokio's own guidance); use `tokio::sync::Mutex` only when th
 live across an `.await`:
 
 ```rust
-// Bad: std::sync::Mutex held across await
+// Bad: std::sync::Mutex guard held across .await. The guard is !Send, so the future is !Send
+// and `tokio::spawn` rejects it; on a current-thread runtime another task locking the same
+// mutex deadlocks the worker.
 async fn bad_example(mutex: Arc<std::sync::Mutex<Data>>) {
     let guard = mutex.lock().unwrap();
-    some_async_operation().await; // Blocks other threads!
-    drop(guard);
-}
-
-// Good: use tokio::sync::Mutex
-async fn good_example(mutex: Arc<tokio::sync::Mutex<Data>>) {
-    let guard = mutex.lock().await;
     some_async_operation().await;
     drop(guard);
 }
+
+// Best: finish the critical section, drop the guard, then await
+async fn good_example(mutex: Arc<std::sync::Mutex<Data>>) {
+    let input = {
+        let guard = mutex.lock().unwrap();
+        guard.snapshot()
+    };
+    some_async_operation(input).await;
+}
+
+// When the guard genuinely must live across the await: tokio::sync::Mutex
+async fn held_across_await(mutex: Arc<tokio::sync::Mutex<Data>>) {
+    let mut guard = mutex.lock().await;
+    guard.value = some_async_operation().await;
+}
 ```
+
+Lock results: `lock().unwrap()` (or `.expect("reason")`) is the accepted idiom. A poisoned lock
+means another thread already panicked mid-update; propagating that panic is usually right.
+Recover with `PoisonError::into_inner` only when the protected data is still valid after a
+partial update.
 
 ### Async-Aware Primitives
 
@@ -196,9 +221,12 @@ let guard = mutex.lock().await;
 let (tx, mut rx) = mpsc::channel(100);
 tx.send(value).await?;
 
-// One-shot for single response
+// One-shot for single response; `send` returns `Err(value)` if the receiver was dropped,
+// which is not an error type, so handle it instead of using `?`
 let (tx, rx) = oneshot::channel();
-tx.send(response)?;
+if tx.send(response).is_err() {
+    tracing::debug!("receiver dropped before the response was sent");
+}
 let result = rx.await?;
 
 // Semaphore for limiting concurrency
@@ -206,20 +234,64 @@ let semaphore = Arc::new(Semaphore::new(10));
 let permit = semaphore.acquire().await?;
 ```
 
-### spawn_blocking for CPU-Bound Work
+### Blocking and CPU-Bound Work
+
+Never block a runtime worker (sync I/O, `std::thread::sleep`, long computation). Pick by the
+kind of work:
+
+| Work | Use |
+|------|-----|
+| Blocking sync I/O or FFI call | `tokio::task::spawn_blocking` |
+| Occasional short CPU burst | `spawn_blocking` |
+| Sustained or parallel CPU work | `rayon` (or a dedicated thread pool), result sent back over a `oneshot` |
 
 ```rust
 use tokio::task;
 
 async fn process_data(data: Vec<u8>) -> Result<Output> {
-    // Move CPU-intensive work off the async runtime
-    let result = task::spawn_blocking(move || {
-        expensive_computation(&data)
-    }).await?;
-
+    // Move blocking work off the async worker threads
+    let result = task::spawn_blocking(move || expensive_computation(&data)).await?;
     Ok(result)
 }
 ```
+
+### Spawning and Joining Tasks
+
+- Keep the `JoinHandle` of every spawned task, or use `tokio::task::JoinSet` for a group; a
+  detached task's panic and errors vanish silently
+- `JoinSet` aborts its remaining tasks when dropped, which gives structured shutdown
+- Handle `JoinError` (the task panicked or was cancelled) instead of `unwrap`ping it
+
+```rust
+use tokio::task::JoinSet;
+
+let mut set = JoinSet::new();
+for url in urls {
+    set.spawn(fetch(url));
+}
+while let Some(joined) = set.join_next().await {
+    match joined {
+        Ok(Ok(body)) => handle(body),
+        Ok(Err(e)) => tracing::warn!(error = %e, "fetch failed"),
+        Err(e) => tracing::error!(error = %e, "task panicked or was cancelled"),
+    }
+}
+```
+
+### Cancellation Safety
+
+A future is cancelled by being dropped: `tokio::select!` drops the losing branches, and
+`tokio::time::timeout` drops the inner future. Any work the dropped future had done but not
+committed is lost.
+
+- In a `select!` loop, only use cancel-safe branches (`mpsc::Receiver::recv`,
+  `broadcast::Receiver::recv`, `TcpListener::accept`, `sleep`); tokio documents cancel safety on
+  each method
+- Not cancel-safe: `AsyncReadExt::read_exact`, `AsyncWriteExt::write_all`, and any hand-written
+  future that performs several steps before completing
+- For a non-cancel-safe operation, pin it outside the loop and poll `&mut fut` in `select!`, or
+  move it into its own task
+- Use a `tokio_util::sync::CancellationToken` for cooperative shutdown instead of abort
 
 ## Deadlock Patterns
 
@@ -260,20 +332,30 @@ fn inner(mutex: &Mutex<Data>) {
     let _guard = mutex.lock().unwrap(); // Blocks forever
 }
 
-// Fix: restructure to avoid nested locking, or use parking_lot::ReentrantMutex
+// Fix: restructure so the lock is taken once, e.g. `outer` locks and passes `&mut Data` to an
+// `inner_locked(data: &mut Data)` helper. (`parking_lot::ReentrantMutex` only hands out `&T`,
+// so it does not allow nested mutation without an extra `RefCell`.)
 ```
 
-### Async Deadlock with Blocking
+### Async Deadlock from Blocking Waits
+
+A short `std::sync::Mutex` section with no `.await` is fine in async code (see above). The bug
+is a *long* blocking wait on a runtime worker: blocking I/O, `std::thread::sleep`, a `Condvar`
+wait, or a lock whose holder is itself waiting on an async task.
 
 ```rust
-// Bug: blocking in async context
-async fn bad(mutex: Arc<std::sync::Mutex<Data>>) {
-    let _guard = mutex.lock().unwrap(); // Blocks the runtime thread!
+// Bug: blocks the worker thread; tasks it should be running (possibly the one that would
+// release `rx`'s sender) can starve
+async fn bad(rx: std::sync::mpsc::Receiver<Job>) {
+    let job = rx.recv().unwrap();
+    run(job).await;
 }
 
-// Fix: use async-aware primitives or spawn_blocking
-async fn good(mutex: Arc<tokio::sync::Mutex<Data>>) {
-    let _guard = mutex.lock().await;
+// Fix: use the async primitive, or move the blocking wait to `spawn_blocking`
+async fn good(mut rx: tokio::sync::mpsc::Receiver<Job>) {
+    while let Some(job) = rx.recv().await {
+        run(job).await;
+    }
 }
 ```
 
@@ -323,10 +405,13 @@ changes touch threads, async, or shared state, also verify:
 - [ ] `tokio::sync::Mutex` wherever a guard lives across `.await`; `std::sync::Mutex` only for
       short, await-free critical sections
 - [ ] No `std::sync::Mutex` held across `.await` points
-- [ ] CPU-bound work uses `spawn_blocking`
+- [ ] Blocking calls use `spawn_blocking`; sustained CPU work uses `rayon` or a dedicated pool
+- [ ] Spawned tasks are joined (`JoinHandle`/`JoinSet`), not silently detached
+- [ ] Every `select!` branch is cancel-safe, or the non-cancel-safe future is pinned outside
 - [ ] Lock ordering is consistent to prevent deadlocks
 - [ ] Lock scopes are minimized (no I/O while holding locks)
 - [ ] Atomic operations use appropriate memory ordering (`SeqCst` if unsure)
 - [ ] Channels preferred over shared state when possible
-- [ ] No `unwrap()` on lock results in production code (handle poisoning)
+- [ ] Lock results use `.unwrap()`/`.expect("reason")` (poison propagates the earlier panic);
+      `into_inner` recovery only where partially updated data is still valid
 - [ ] Thread-safety traits (`Send`/`Sync`) are satisfied

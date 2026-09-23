@@ -9,33 +9,30 @@ Generate and view Rust documentation.
 
 ## Instructions
 
-Generate documentation for the project and dependencies:
-
-```bash
-cargo doc
-```
-
-To open documentation in browser:
-
-```bash
-cargo doc --open
-```
-
-To generate documentation without dependencies:
+Generate documentation for the project's own crates (the default):
 
 ```bash
 cargo doc --no-deps
 ```
 
+Include dependencies only when you need their docs offline (much slower):
+
+```bash
+cargo doc
+```
+
+Output lands in `target/doc/<crate_name>/index.html`. Do not pass `--open` unless the user asks
+to view the docs in a browser.
+
 ## Looking Up Crate Documentation
 
-For crate documentation, use docs.rs:
+For crate documentation, use docs.rs. Take the lookup target from the request (`$ARGUMENTS` when
+invoked as a command):
 
-### Arguments
-
-- `crate`: The crate name to look up (e.g., `tokio`, `serde`, `axum`)
-- `version` (optional): Specific version (e.g., `1.0.0`). Defaults to latest.
-- `item` (optional): Specific function, type, or module to focus on
+- Crate name to look up (e.g., `tokio`, `serde`, `axum`)
+- Version (optional; e.g., `1.0.0`). Defaults to latest; prefer the version in `Cargo.lock` when
+  the crate is already a dependency
+- Item (optional): specific function, type, or module to focus on
 
 ### URL Structure
 
@@ -43,7 +40,10 @@ For crate documentation, use docs.rs:
 |------|------------|---------|
 | Latest | `https://docs.rs/{crate}` | `https://docs.rs/tokio` |
 | Specific version | `https://docs.rs/{crate}/{version}` | `https://docs.rs/tokio/1.36.0` |
-| Specific item | `https://docs.rs/{crate}/latest/{crate}/{path}` | `https://docs.rs/tokio/latest/tokio/sync/index.html` |
+| Specific item | `https://docs.rs/{crate}/latest/{crate_ident}/{path}` | `https://docs.rs/serde_json/latest/serde_json/fn.from_str.html` |
+
+`{crate_ident}` is the crate name with `-` replaced by `_` (the Rust identifier), e.g.
+`https://docs.rs/tokio-util/latest/tokio_util/sync/index.html`.
 
 ### Execution
 
