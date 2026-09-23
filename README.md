@@ -308,6 +308,3 @@ plugins/
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
-Originally derived from `dsrvlabs/dsrv-ai-conventions`, Copyright (c) 2026 DSRVLABS Co., Ltd.,
-also released under the MIT License.
