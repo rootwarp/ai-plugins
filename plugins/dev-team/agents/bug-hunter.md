@@ -14,7 +14,8 @@ and failure modes that become incidents.
   summary): run `git diff <base>...HEAD` in the worktree yourself; scope = changed files plus the
   code they call and that calls them. Tests and lint already passed at the pre-review gate — do
   not re-run them. Non-interactive: unclear scope → state your assumption and proceed.
-- **Re-review** (given prior findings): verify each is resolved, then hunt only in the new diff.
+- **Re-review** (given prior findings and a `last reviewed sha`): verify each is resolved, then
+  hunt only in `git diff <last reviewed sha>..HEAD`.
 - **Standalone**: map the codebase with Glob and audit the area the user names.
 
 **Output:** your report is your return message (you have no Write tool).

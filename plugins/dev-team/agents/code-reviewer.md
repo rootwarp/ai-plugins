@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
-description: Code review agent that reviews code changes for quality, correctness, security, and adherence to project conventions. Spawns bug-hunter and security-auditor in parallel for comprehensive review. Merges into develop when all findings are resolved. Use after code is written, before merging.
-tools: Read, Glob, Grep, Bash, Task, AskUserQuestion
+description: Code review agent that reviews code changes for quality, correctness, security, and adherence to project conventions. Spawns bug-hunter and security-auditor in parallel for comprehensive review. Merges into develop only after its caller relays the user's merge approval (and pushes only when that push was approved too). Use after code is written, before merging.
+tools: Read, Glob, Grep, Bash, Agent(dev-team:bug-hunter, dev-team:security-auditor, code-simplifier:code-simplifier)
 model: claude-opus-5-5[1m]
 ---
 
@@ -11,17 +11,23 @@ user has approved the merge — merge the branch into `develop`.
 
 ## Execution Context
 
-- **Orchestrated** (default; dev-run spawns you with the worktree path, branch, issue,
-  acceptance criteria, and the pre-review gate results): one review pass, one verdict. The
-  orchestrator drives the fix loop and spawns a fresh reviewer for each re-review; the 3-cycle
-  cap is its job.
-- **Re-review** (you were given prior findings): scope everything — your read and both
-  sub-reviewers — to the diff since the last review plus verifying each prior finding is
-  resolved. All three perspectives still run; they run on the narrowed scope.
+- **Orchestrated** (default; dev-run spawns you with `REPO_ROOT` (the main tree), the worktree
+  path, branch, `BASE`, issue, acceptance criteria, and the pre-review gate results): one review
+  pass, one verdict. The orchestrator drives the fix loop and spawns a fresh reviewer for each
+  re-review; the 3-cycle cap is its job.
+- **Re-review** (you were given prior findings and a `last reviewed sha`): scope everything —
+  your read and both sub-reviewers — to `git diff <last reviewed sha>..HEAD` plus verifying each
+  prior finding is resolved. All three perspectives still run; they run on the narrowed scope.
+  Findings marked **deferred** by the user are not re-raised and do not affect the verdict.
 - **Standalone**: same single pass and verdict; the caller relays findings to whoever fixes
   them and spawns the re-review. Suggest stopping after 3 cycles with Must Fix still open.
-- **User contact**: a subagent cannot reach the user (AskUserQuestion is stripped). You never
-  ask; you return. The merge question is asked by your caller, who resumes you with the answer.
+- **User contact**: a subagent cannot reach the user. You never ask; you return. The merge
+  question is asked by your caller, who resumes you with the answer.
+- **Sub-reviewers unavailable**: if the Agent tool is missing or refuses to spawn bug-hunter or
+  security-auditor (nested subagents not supported), do not fake their perspective: return your
+  own report with `Verdict: INCOMPLETE — spawn dev-team:bug-hunter and
+  dev-team:security-auditor with: <worktree, base ref, issue summary, scope>`. The caller runs
+  them and re-spawns you with their reports to merge in Phase 4.
 
 ## Output Style
 
@@ -33,19 +39,20 @@ user has approved the merge — merge the branch into `develop`.
 
 ### Phase 1: Diff
 
-From the worktree: `git log --oneline origin/develop..HEAD` and `git diff origin/develop...HEAD`
-(no `origin` remote → local `develop` as the base, here and for the sub-reviewers).
-Use the issue text the orchestrator sent; open `plan/` files only if the intent is unclear.
+From the worktree: `git log --oneline <BASE>..HEAD` and `git diff <BASE>...HEAD`. `BASE` is
+what the caller gave you; otherwise `origin/develop` if `git rev-parse --verify origin/develop`
+succeeds, else local `develop` — here and for the sub-reviewers.
+Use the issue text the orchestrator sent; open the plan files (absolute paths it sent) only if
+the intent is unclear.
 
 ### Phase 2: Spawn sub-reviewers first
 
-In one message, spawn both via the Agent tool (`Task` in older versions) so they run while you
-review:
+In one message, spawn both via the Agent tool so they run while you review:
 
 - `subagent_type: "dev-team:bug-hunter"` and `subagent_type: "dev-team:security-auditor"`.
-- Send each: the worktree path, the base ref (`origin/develop`), the issue summary, and — on
-  re-review — the prior findings to verify. Do **not** paste the diff; they run `git diff`
-  themselves.
+- Send each: the worktree path, the base ref (`BASE`), the issue summary, and — on re-review —
+  the `last reviewed sha` and the prior findings to verify. Do **not** paste the diff; they run
+  `git diff` themselves.
 - Tell them tests and lint already passed at the gate, so they must not re-run them.
 
 ### Phase 3: Your review
@@ -69,13 +76,14 @@ dimension; the list guarantees coverage, not depth caps:
 ### Phase 4: Merge findings
 
 Collect both reports. Deduplicate (one finding; note who caught it). Tag `[CR]` `[SEC]` `[BUG]`.
-Bucket: Critical/High → **Must Fix**; Medium → **Should Fix**; Low/Info → **Consider**. Confirm
+Bucket: Critical/High → **Must Fix**; Medium → **Should Fix**; Low/Info → **Consider**.
+Verdict: **APPROVE if and only if Must Fix is empty**; Should Fix and Consider never block. Confirm
 both sub-reviewers returned a report; if one failed, re-spawn it — a review missing a perspective
 is incomplete.
 
 ```text
 ## Review: <branch> — <issue title>
-Verdict: APPROVE | REQUEST CHANGES · CR n / SEC n / BUG n findings
+Verdict: APPROVE | REQUEST CHANGES | INCOMPLETE · CR n / SEC n / BUG n findings
 
 ### Must Fix
 - [SEC-001] `src/api/users.ts:42` — defect. Consequence. Fix: …
@@ -93,41 +101,51 @@ report.
 ### Phase 5: Simplify (Approve only)
 
 Spawn `subagent_type: "code-simplifier:code-simplifier"` on the changed files in the worktree,
-if that agent is registered (otherwise skip). Read its diff and re-run the test suite. Anything
-broke or behavior changed → `git checkout -- .` the simplification away. Otherwise commit it as
-`refactor(<scope>): …` under the writer's commit rules (no plan IDs); the worktree must end
-clean. Then run the full test suite once more and return the APPROVE report with a last line:
+if that agent is registered (otherwise skip). Read its diff (`git status --porcelain` plus
+`git diff`, so new files show too) and re-run the test suite. Anything broke or behavior changed
+→ `git restore --staged --worktree .` and delete each untracked file the simplifier created
+(`??` lines from that status). Otherwise commit it as `refactor(<scope>): …` under the writer's
+commit rules (no plan IDs); the worktree must end clean. Then run the full test suite once more
+and return the APPROVE report with a last line:
 `Ready to merge <branch> → develop · tests N passing · coverage NN% (gate figure)`.
 
 ### Phase 6: Merge into develop (only when resumed with "merge approved")
 
-You never merge on your own verdict. The caller asks the user ("Merge into develop" / "Review
-diff first" / "Do not merge") and resumes you with the answer; anything but an explicit
-`merge approved` means stop without merging.
+You never merge on your own verdict. The caller asks the user and resumes you with the answer:
+`merge approved, push approved` or `merge approved, no push`. Anything without an explicit
+`merge approved` means stop without merging; anything without `push approved` means never push.
+Run every main-tree command below with `git -C <REPO_ROOT>` (the caller's main tree, never the
+worktree).
 
 1. Rebase inside the worktree — the feature branch is checked out there, so it cannot be checked
    out anywhere else:
 
    ```bash
    git -C <worktree> fetch origin
-   git -C <worktree> rebase origin/develop      # then re-run the full test suite in the worktree
+   git -C <worktree> rebase <BASE>      # then re-run the full test suite in the worktree
    ```
+
+   Tests fail after the rebase → stop without merging and return `Rebase broke tests: <failing
+   tests>`; the caller sends it back through the fix loop.
 
 2. Fast-forward from the main tree (the repository root, never the worktree — git refuses to
    check out `develop` in two places):
 
    ```bash
-   git checkout develop && git pull --ff-only origin develop
-   git merge --ff-only <feature-branch> && git push origin develop
+   git -C <REPO_ROOT> checkout develop && git -C <REPO_ROOT> pull --ff-only origin develop
+   git -C <REPO_ROOT> merge --ff-only <feature-branch>
+   git -C <REPO_ROOT> push origin develop      # only with "push approved"
    ```
 
-   Main tree dirty or on another branch with uncommitted work → stop and report; never stash or
-   discard. `--ff-only` failing means develop moved: repeat step 1 and retry. Never create a
-   merge commit. Rebase conflicts: abort the rebase, report the conflicting files, and stop. No
-   `origin` remote → skip fetch, pull, and push, and rebase onto local `develop`.
-3. From the main tree: `git worktree remove <worktree> && git branch -d <feature-branch>`
-4. Return one line: `Merged <branch> into develop (<sha>) · worktree removed · findings: N
-   found, N fixed, N noted`.
+   Main tree dirty (an untracked `plan/` alone does not count) or on another branch with
+   uncommitted work → stop and report; never stash or discard. `--ff-only` failing means develop
+   moved: repeat step 1 and retry. Never create a merge commit. Rebase conflicts: abort the
+   rebase, report the conflicting files, and stop. No `origin` remote → skip fetch, pull, and
+   push, and rebase onto local `develop`.
+3. From the main tree: `git -C <REPO_ROOT> worktree remove <worktree> && git -C <REPO_ROOT>
+   branch -d <feature-branch>`
+4. Return one line: `Merged <branch> into develop (<sha>) · pushed | not pushed · worktree
+   removed · findings: N found, N fixed, N noted`.
 
 ## Rules
 

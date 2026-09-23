@@ -46,8 +46,12 @@ You are a coordinator, not a narrator.
 - **Agent tool** for single sequential agents: the PRD (Stage 2), the project plan (Stage 5), and
   single-file revisions.
 - **Workflow tool** for non-interactive fan-out: Stages 3, 4, 6, and the Stage 7 render step.
+  No Workflow tool in this session → run the same stages with the Agent tool instead: spawn the
+  script's agents with the same `agentType`s and prompts (independent ones in one message, in
+  parallel), apply the same stage order and null handling by hand, then gate as usual.
 - **Main loop, sequential, after explicit approval** for every side effect outside the working
-  tree — all `gh` writes in Stage 7. Never put a network mutation in a workflow script.
+  tree — all `gh` writes in Stage 7 and the Stage 8 plan commit. Never put a network mutation
+  or a git write in a workflow script.
 
 ### Workflow stages: compute → launch → wait → read → gate
 
@@ -203,6 +207,7 @@ const results = await pipeline(
 )
 
 const clean = results.filter(Boolean)
+if (!clean.length) return { angles: [], overview: null, error: 'every research angle failed' }
 const verification = clean.map((r) => ({
   angle: r.angle,
   refuted: r.verdict ? r.verdict.refutedClaims : null,
@@ -312,6 +317,8 @@ const candidates = (await parallel(priorities.map((p) => () => agent(
   'Return priority, path, summary, keyDecisions.',
   { agentType: 'dev-team:software-architect', label: 'design:' + p.key, phase: 'Design', schema: CANDIDATE }
 )))).filter(Boolean)
+
+if (!candidates.length) return { winner: null, architecture: null, error: 'every candidate failed' }
 
 const judged = await agent(
   'Judge candidate architectures against the quality checklist: no circular dependencies, ' +
@@ -444,6 +451,7 @@ const perPhase = await pipeline(
 )
 
 const clean = perPhase.filter(Boolean)
+if (!clean.length) return { phases: 0, summary: null, error: 'every phase estimate failed', sizing: [] }
 
 const summary = await agent(
   'Write the cross-phase summary ' + outDir + '/00-summary.md from the phase files ' +
@@ -464,9 +472,10 @@ return {
 }
 ```
 
-Every stage callback receives `(previousResult, originalPhase)` — that is how Check and Revise
-know `p.num`. `sizing[].check` is the pre-revision review; re-read the phase files for the final
-counts.
+Any workflow (Stages 3, 4, 6) that returns `error` wrote nothing usable: report it and
+re-launch; never gate on missing artifacts. Every stage callback receives `(previousResult,
+originalPhase)` — that is how Check and Revise know `p.num`. `sizing[].check` is the
+pre-revision review; re-read the phase files for the final counts.
 
 **Gate — Estimation** (phase table from `plan/issues/00-summary.md` with plan tasks vs issues per
 phase + ≤ 10 lines: execution plan, what the check merged or split, and why any phase has
@@ -494,12 +503,12 @@ Any failure: report it and offer to skip the stage.
    `owner/repo`. Never guess a repository.
 3. Read `plan/issues/github-sync.md` if present; everything listed already exists and is
    skipped.
-4. No sync file → `gh issue list --state all --limit 100 --json number,title`; match phase and
-   issue titles; report collisions at the dry-run gate.
-5. `gh label list --limit 200 --json name -q '.[].name'`; create only the missing labels you
-   will use (`phase`, `P0`/`P1`/`P2`, `feature`/`bug`/`chore`/`spike`), e.g.
-   `gh label create phase --color 0E8A16 --description "Phase-level tracking issue"`.
-   `gh issue create --label` fails on unknown labels.
+4. No sync file → `gh issue list --state all --limit 1000 --search 'in:title "Phase"' --json
+   number,title` plus one search per distinctive child title; match phase and issue titles;
+   report collisions at the dry-run gate.
+5. `gh label list --limit 200 --json name -q '.[].name'` — read only. Note which of the labels
+   you will use (`phase`, `P0`/`P1`/`P2`, `feature`/`bug`/`chore`/`spike`) are missing; they are
+   created in 7.5 after the dry-run LGTM, never here.
 
 #### 7.3 Render (Workflow)
 
@@ -597,12 +606,17 @@ possible duplicates: …
 
 "Create these N issues on <owner/repo>? Reply `LGTM` to publish, or tell me what to change."
 Changes → fix the manifests (re-render a phase, or edit one body file) and re-present. Never act
-on an `LGTM` given before this table was shown.
+on an `LGTM` given before this table was shown. Possible duplicates → before the LGTM question,
+AskUserQuestion per duplicate: "Skip — use existing #N" (record it in `github-sync.md` as
+existing) / "Create anyway".
 
 #### 7.5 Publish (main loop, `gh`)
 
 Phase by phase, in order, skipping anything in `plan/issues/github-sync.md`.
 
+0. Labels first: create only the missing labels named in the approved dry-run, e.g.
+   `gh label create phase --color 0E8A16 --description "Phase-level tracking issue"`.
+   Issue creation fails on unknown labels.
 1. Phase issue:
 
    ```bash
@@ -657,3 +671,11 @@ Next: /dev-run plan/issues/01-phase-1-<name>.md
 
 Ask whether anything should change; route changes through that stage's revision handling and
 re-run its gate. Do not restart the pipeline.
+
+Then offer to commit the plan — `/dev-run` needs `plan/` on `develop`, because its worktrees are
+cut from `develop` and a clean main tree is required. AskUserQuestion: "Commit plan/ to develop" /
+"Commit and push to origin/develop" / "Leave plan/ uncommitted". On a commit option: switch the
+main tree to `develop` (missing → ask whether to create it from the default branch; tracked
+changes outside `plan/` → report and stop, never stash or discard), then
+`git add plan/ && git commit -m "docs(plan): add development plan"`; push only on the push
+option. Never commit or push without that answer.

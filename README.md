@@ -8,11 +8,14 @@ orchestration.
 ### From GitHub
 
 ```bash
+# Add the marketplace once
+/plugin marketplace add rootwarp/ai-plugins
+
 # Install specific plugin
-/plugin install rootwarp/ai-plugins/plugins/go
-/plugin install rootwarp/ai-plugins/plugins/rust
-/plugin install rootwarp/ai-plugins/plugins/python
-/plugin install rootwarp/ai-plugins/plugins/dev-team
+/plugin install go@rootwarp-ai-plugins
+/plugin install rust@rootwarp-ai-plugins
+/plugin install python@rootwarp-ai-plugins
+/plugin install dev-team@rootwarp-ai-plugins
 ```
 
 ### Local Development
@@ -30,7 +33,7 @@ claude --plugin-dir ./plugins/dev-team
 
 | Command/Skill | Description |
 |---------------|-------------|
-| `/golang:init-dir` | Initialize Go project with directories, Makefile, and .gitignore |
+| `/go:init-dir` | Initialize Go project with directories, Makefile, and .gitignore |
 | `/go-build` | Build the Go project |
 | `/go-test` | Run tests with coverage |
 | `/go-lint` | Run linters (golangci-lint or go vet) |
@@ -42,7 +45,7 @@ claude --plugin-dir ./plugins/dev-team
 
 ```bash
 # Initialize a new Go project (interactive)
-/golang:init-dir
+/go:init-dir
 
 # Build the project
 /go-build
@@ -230,6 +233,8 @@ All agents run on Claude Opus 5.5 with a 1M context window.
    capped — only issue size is constrained
 7. **GitHub Issues (optional)** - files one phase issue per phase, with each planned issue created
    as a sub-issue of it
+8. **Wrap-up** - Summarizes the artifacts and offers to commit `plan/` to `develop` so `/dev-run`
+   worktrees can read it
 
 Stages 2-6 each end in an `LGTM` gate. Subagents cannot talk to you, so every question comes
 from the lead. Stage 7 is opt-in: it is skipped unless you
@@ -240,11 +245,13 @@ ask for it, and it shows exactly what it will create before creating anything. I
 
 1. **Load Issues** - Parse phase files and build execution queues
 2. **Write** - `code-writer` implements each issue in an isolated worktree
-3. **Pre-Review Gate** - Coverage >= 70%, tests passing, lint clean
+3. **Pre-Review Gate** - Coverage >= 70% on changed files, tests passing, lint clean, all work
+   committed, Conventional Commits messages with no plan IDs
 4. **Review** - `code-reviewer` runs quality, security, and bug review
-5. **Fix Cycle** - Up to 3 iterations to resolve findings
-6. **Merge** - The lead asks you to approve; `code-reviewer` then rebases and fast-forwards into
-   `develop`
+5. **Fix Cycle** - Resolve findings; after 3 cycles with Must Fix still open, you choose to keep
+   fixing, abort, or merge anyway
+6. **Merge** - The lead asks you to approve the merge and the push to `origin/develop`;
+   `code-reviewer` then rebases, fast-forwards, and pushes only what you approved
 
 </details>
 
@@ -284,21 +291,21 @@ plugins/
 │       └── dev-run/
 ├── go/
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/golang/
+│   ├── commands/init-dir.md
 │   └── skills/
 │       ├── go-build/ go-doc/ go-fmt/ go-lint/ go-mod/ go-test/
 │       └── go-architecture/ go-code-style/ go-concurrency/
 │           go-project-layout/ go-security/ go-tdd/
 ├── rust/
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/rust/
+│   ├── commands/init-dir.md
 │   └── skills/
 │       ├── cargo-build/ cargo-check/ cargo-clippy/ cargo-doc/ cargo-fmt/ cargo-test/
 │       └── rust-architecture/ rust-code-style/ rust-concurrency/
 │           rust-project-layout/ rust-security/ rust-tdd/
 └── python/
     ├── .claude-plugin/plugin.json
-    ├── commands/python/
+    ├── commands/init-dir.md
     └── skills/
         ├── mypy/ pytest/ python-doc/ ruff/ uv/
         └── python-architecture/ python-code-style/ python-concurrency/
