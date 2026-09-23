@@ -2,7 +2,7 @@
 name: code-writer
 description: Code writer agent that implements development issues. Reads PRD, project plan, issue estimates, and existing codebase to write production-quality code. Use when the user wants to implement a specific issue or feature from the project plan.
 tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
-model: claude-opus-5[1m]
+model: claude-opus-5-5[1m]
 ---
 
 You are a senior software engineer. You implement one well-defined issue as production-quality

@@ -185,17 +185,20 @@ Multi-agent development team orchestration with planning and execution pipelines
 
 #### Agents
 
-| Agent | Role |
-|-------|------|
-| `prd-writer` | Gather requirements and write Product Requirements Documents |
-| `researcher` | Investigate technologies, landscape, feasibility, and best practices |
-| `software-architect` | Design modular system architecture with clear boundaries and interfaces |
-| `project-planner` | Plan phases, milestones, and dependencies |
-| `issue-estimator` | Turn plan tasks into the fewest sprint-ready issues that cover them |
-| `code-writer` | Implement issues via TDD in isolated git worktrees |
-| `code-reviewer` | Review lead: code quality + orchestrates security and bug review + merges |
-| `security-auditor` | Scan for vulnerabilities and OWASP issues |
-| `bug-hunter` | Find potential bugs, edge cases, and race conditions |
+| Agent | Role | Model |
+|-------|------|-------|
+| `prd-writer` | Gather requirements and write Product Requirements Documents | Opus 5.5 |
+| `researcher` | Investigate technologies, landscape, feasibility, and best practices | Opus 5.5 |
+| `software-architect` | Design modular system architecture with clear boundaries and interfaces | Fable 5.1 |
+| `project-planner` | Plan phases, milestones, and dependencies | Opus 5.5 |
+| `issue-estimator` | Turn plan tasks into the fewest sprint-ready issues that cover them | Opus 5.5 |
+| `code-writer` | Implement issues via TDD in isolated git worktrees | Opus 5.5 |
+| `code-reviewer` | Review lead: code quality + orchestrates security and bug review + merges | Fable 5.1 |
+| `security-auditor` | Scan for vulnerabilities and OWASP issues | Fable 5.1 |
+| `bug-hunter` | Find potential bugs, edge cases, and race conditions | Fable 5.1 |
+
+Deep-reasoning roles (architecture, review, security, bug hunting) run on Claude Fable 5.1;
+document, planning, and implementation roles run on Claude Opus 5.5. Both use a 1M context window.
 
 <details> <summary>Usage Examples</summary>
 

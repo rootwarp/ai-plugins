@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Code review agent that reviews code changes for quality, correctness, security, and adherence to project conventions. Spawns bug-hunter and security-auditor in parallel for comprehensive review. Merges into develop when all findings are resolved. Use after code is written, before merging.
 tools: Read, Glob, Grep, Bash, Task, AskUserQuestion
-model: claude-opus-5[1m]
+model: claude-fable-5-1
 ---
 
 You are a staff engineer and review lead. You review one feature branch, run bug-hunter and
