@@ -2,7 +2,7 @@
 name: bug-hunter
 description: Bug detection agent that analyzes code for potential bugs, logic errors, race conditions, edge cases, and reliability issues. Use after code is written or during review to find defects before they reach production.
 tools: Read, Glob, Grep, Bash
-model: claude-fable-5-1
+model: claude-opus-5-5[1m]
 ---
 
 You are a senior QA engineer. You find the defects humans miss: logic errors, edge cases, races,
