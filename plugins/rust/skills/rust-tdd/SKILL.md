@@ -5,155 +5,57 @@ name: rust-tdd
 
 # Test-Driven Development (TDD)
 
-- Write tests BEFORE implementing functionality
-- Follow the Red-Green-Refactor cycle:
-  1. Write a failing test that defines expected behavior
-  2. Write minimal code to make the test pass
-  3. Refactor while keeping tests green
-- Each test should test ONE behavior
-- Use descriptive test names: `test_function_scenario_expected_behavior`
-- Place unit tests in `#[cfg(test)]` module in the same file
-- Use `tests/` directory for integration tests
-- Mock external dependencies using traits and test doubles
-- Aim for meaningful coverage, not 100% coverage
-- When using the `dev-team` plugin, `code-writer` enforces a ≥70% coverage floor for new code;
-  measure it with `cargo llvm-cov` (check `cargo llvm-cov --version` first and ask the user
-  before installing `cargo-llvm-cov`)
-- See the `rust-code-style` skill for the MANDATORY fmt/clippy/test gate that must pass before
-  every commit
+Work Red-Green-Refactor. Write one failing test for the next behavior and confirm it fails for
+the right reason (an assertion, not a compile error in unrelated code). Add the minimum code to
+pass, then refactor while green. The `rust-code-style` quality gate (fmt, clippy, test) must pass
+before every commit.
 
-## Test Organization
+## Conventions
 
-```rust
-// src/user.rs
-pub struct User {
-    pub name: String,
-    pub email: String,
-}
+- Names: `test_<function>_<scenario>_<expected>`, one behavior per test.
+- Unit tests live in a `#[cfg(test)] mod tests { use super::*; … }` at the bottom of the same
+  file. Integration tests in `tests/` exercise the public API only. Shared helpers go in
+  `tests/common/mod.rs`, which Cargo does not build as a test binary.
+- Async tests use `#[tokio::test]`. Parameterized cases use `rstest` (`#[rstest]` +
+  `#[case(...)]`) or `test-case`. Panics use `#[should_panic(expected = "...")]`.
+- Aim for meaningful coverage, not 100%. Under the `dev-team` plugin, `code-writer` enforces a
+  ≥70% line-coverage floor on changed files. Measure it with `cargo llvm-cov` (check
+  `cargo llvm-cov --version` first, and ask before installing `cargo-llvm-cov`).
 
-impl User {
-    pub fn new(name: &str, email: &str) -> Result<Self, ValidationError> {
-        if name.is_empty() {
-            return Err(ValidationError::EmptyName);
-        }
-        Ok(Self {
-            name: name.to_string(),
-            email: email.to_string(),
-        })
-    }
-}
+## Mocking Through Traits
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_user_valid_input_creates_user() {
-        let user = User::new("Alice", "alice@example.com").unwrap();
-        assert_eq!(user.name, "Alice");
-        assert_eq!(user.email, "alice@example.com");
-    }
-
-    #[test]
-    fn test_new_user_empty_name_returns_error() {
-        let result = User::new("", "alice@example.com");
-        assert!(matches!(result, Err(ValidationError::EmptyName)));
-    }
-}
-```
-
-## Test Utilities
-
-- Use `#[test]` for synchronous tests
-- Use `#[tokio::test]` for async tests
-- Use `#[should_panic(expected = "message")]` for panic tests
-- Use `assert!`, `assert_eq!`, `assert_ne!` for assertions
-- Use `rstest` or `test-case` for parameterized tests
+Put external dependencies behind a small trait and pass a hand-written fake in tests. Record
+calls in a `Mutex`, not a `RefCell`, when the trait requires `Send + Sync`, because `RefCell` is
+not `Sync`:
 
 ```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(2, 2, 4)]
-    #[case(0, 5, 5)]
-    #[case(-1, 1, 0)]
-    fn test_add(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
-        assert_eq!(add(a, b), expected);
-    }
-}
-```
-
-## Mocking with Traits
-
-```rust
-// Define trait for external dependency
-trait EmailSender: Send + Sync {
-    fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), Error>;
+#[derive(Default)]
+struct MockEmailSender {
+    sent: Mutex<Vec<String>>,
 }
 
-// Production implementation
-struct SmtpEmailSender { /* ... */ }
-impl EmailSender for SmtpEmailSender { /* ... */ }
-
-// Test mock
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    // `Mutex`, not `RefCell`: the trait requires `Send + Sync`, and `RefCell` is not `Sync`.
-    #[derive(Default)]
-    struct MockEmailSender {
-        sent: Mutex<Vec<(String, String, String)>>,
-    }
-
-    impl EmailSender for MockEmailSender {
-        fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), Error> {
-            self.sent.lock().unwrap().push((to.into(), subject.into(), body.into()));
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn test_signup_new_user_sends_welcome_mail() {
-        let mailer = MockEmailSender::default();
-        signup(&mailer, "alice@example.com").unwrap();
-        assert_eq!(mailer.sent.lock().unwrap().len(), 1);
+impl EmailSender for MockEmailSender {
+    fn send(&self, to: &str, _subject: &str, _body: &str) -> Result<(), Error> {
+        self.sent.lock().unwrap().push(to.to_owned());
+        Ok(())
     }
 }
-```
-
-For larger traits, `mockall` (`#[automock]`) generates the double; keep hand-written fakes for
-small ones.
-
-## Integration Tests
-
-Place in `tests/` directory:
-
-```rust
-// tests/api_integration.rs
-use std::net::TcpListener;
-
-use my_crate::Client;
-
-mod common; // shared helpers live in tests/common/mod.rs, which Cargo does not build as a test
 
 #[test]
-fn test_client_ping_local_server_succeeds() {
-    // Bind an ephemeral port in-process; never depend on a server that happens to be running
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = std::thread::spawn(move || common::serve_one(listener));
-
-    let client = Client::new(addr);
-    assert!(client.ping().is_ok());
-    server.join().unwrap();
+fn test_signup_new_user_sends_welcome_mail() {
+    let mailer = MockEmailSender::default();
+    signup(&mailer, "alice@example.com").unwrap();
+    assert_eq!(*mailer.sent.lock().unwrap(), ["alice@example.com"]);
 }
 ```
 
-Tests that need real external services (database, network API) must not run in the default
-`cargo test` gate: mark them `#[ignore = "needs Postgres"]` and run them explicitly with
-`cargo test -- --ignored`.
+For larger traits, `mockall` (`#[automock]`) generates the double. Keep hand-written fakes for
+small ones.
+
+## Integration Tests and External Services
+
+- Tests that need a server start one in-process on an ephemeral port
+  (`TcpListener::bind("127.0.0.1:0")`) rather than relying on one that happens to be running.
+- Tests that need real external services (a database, a network API) stay out of the default
+  `cargo test` gate. Mark them `#[ignore = "needs Postgres"]` and run them explicitly with
+  `cargo test -- --ignored`.

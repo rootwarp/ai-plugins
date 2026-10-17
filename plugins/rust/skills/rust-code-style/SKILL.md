@@ -5,217 +5,49 @@ name: rust-code-style
 
 # Code Style
 
-Follow [The Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/), [Rust API
-Guidelines](https://rust-lang.github.io/api-guidelines/), and [Clippy
-Lints](https://rust-lang.github.io/rust-clippy/master/).
+Follow [The Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/), the [Rust API
+Guidelines](https://rust-lang.github.io/api-guidelines/), and Clippy. The rules below are the
+project's choices on top of those.
 
-## Formatting
+## Naming and Organization
 
-- Use `rustfmt` for all formatting - no exceptions
-- Keep line length at 100 characters (rustfmt default)
-- Use 4 spaces for indentation
+- Package names are `kebab-case` in `Cargo.toml` (`my-crate`, imported as `my_crate`); prefer a
+  single word.
+- Group imports std, external crates, then `crate::`, separated by blank lines (stable rustfmt
+  does not regroup them for you).
+- Default to private, then `pub(crate)`; make an item `pub` only when it is part of the API.
+  Re-export the public API from `lib.rs` and define the types in submodules.
+- Keep traits small and compose them with supertrait bounds (see the `rust-architecture`
+  skill). Derive `Debug` on every public type, plus `Clone`, `PartialEq`, `Eq`, `Hash` where
+  they make sense.
+- Take borrowed parameters (`&str`, `&[T]`, `impl AsRef<Path>`) and return owned values; use
+  `Cow<'_, str>` when ownership is conditional. Clone explicitly, where the cost is visible.
 
-## Naming
+## Errors
 
-- Types: `PascalCase` (structs, enums, traits, type aliases)
-- Functions/methods: `snake_case`
-- Variables/fields: `snake_case`
-- Constants: `SCREAMING_SNAKE_CASE`
-- Modules: `snake_case`
-- Crates: `kebab-case` package names in `Cargo.toml` (`my-crate`), imported as `my_crate`;
-  prefer single words
-- Lifetimes: short lowercase (`'a`, `'b`, `'ctx`)
-- Type parameters: single uppercase letters (`T`, `E`, `K`, `V`) or descriptive (`Item`, `Error`)
+- Libraries define typed errors with `thiserror`; binaries use `anyhow` and attach context with
+  `.context(...)`. Put the failing input (path, id) in the error, not only the cause.
+- No `.unwrap()` or `.expect()` on fallible operations in library code; return a `Result`. An
+  `.expect("why this cannot fail")` on a true invariant is fine. Lock results are the usual
+  exception (see `rust-concurrency`).
+- Panic only for bugs, never for expected failures such as bad input or I/O errors.
 
-## Code Organization
+## Documentation
 
-- Group imports: std, external crates, crate-internal (blank line separated)
-- Order within modules: types, implementations, functions
-- Keep modules focused; one concept per module
-- Use `pub(crate)` for internal visibility; avoid `pub` by default
-- Re-export from `lib.rs` for clean public API
+- Document every public item with `///`, and each module or crate with `//!`. Add `# Errors`,
+  `# Panics`, and `# Safety` sections whenever they apply.
+- Comments explain why; the code says what.
+- Doc examples are compiled and run by `cargo test`, so they are part of the quality gate. Hide
+  setup lines with `# `, end an example that uses `?` with `# Ok::<(), E>(())`, and mark
+  examples that touch the filesystem or network `no_run` (still compiled, not executed). Use
+  `ignore` only for code that cannot compile in isolation.
 
-```rust
-// Good import organization
-use std::collections::HashMap;
-use std::io::{self, Read, Write};
+Concurrency, testing, and `unsafe` live in the `rust-concurrency`, `rust-tdd`, and
+`rust-security` skills.
 
-use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+## Quality Gate
 
-use crate::config::Config;
-use crate::error::Result;
-```
-
-## Traits
-
-- Keep traits small and focused (1-3 methods ideal; see the `rust-architecture` skill)
-- Use default implementations where sensible
-- Derive common traits when appropriate: `Debug`, `Clone`, `PartialEq`
-- Prefer small traits combined via supertrait bounds over one large trait
-- Use extension traits for adding methods to foreign types
-
-```rust
-// Good: focused trait
-pub trait Reader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
-}
-
-// Derive common traits
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UserId(String);
-```
-
-## Error Handling
-
-- Use `Result<T, E>` for recoverable errors; never panic for expected failures
-- Define custom error types with `thiserror` or manual implementation
-- Use `?` operator for error propagation
-- Add context to errors using `anyhow` or custom error types
-- Avoid `.unwrap()` and `.expect()` in library code
-- Use `Option` for optional values, not sentinel values
-
-```rust
-// Good: custom error with context
-#[derive(Debug, thiserror::Error)]
-pub enum ConfigError {
-    #[error("failed to read config file: {}", path.display())]
-    Read { path: PathBuf, source: io::Error },
-
-    #[error("invalid config format")]
-    Parse(#[from] toml::de::Error),
-}
-
-// Good: error propagation with context
-fn load_config(path: &Path) -> Result<Config, ConfigError> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| ConfigError::Read { path: path.to_owned(), source: e })?;
-    let config: Config = toml::from_str(&content)?;
-    Ok(config)
-}
-```
-
-## Ownership and Borrowing
-
-- Prefer borrowing over cloning when possible
-- Use `&str` over `String` in function parameters
-- Return owned types from constructors and factories
-- Use `Cow<'_, str>` when ownership is conditional
-- Clone explicitly; avoid hidden copies
-
-```rust
-// Good: borrow in parameters, own in return
-fn process_name(name: &str) -> String {
-    name.trim().to_uppercase()
-}
-
-// Good: Cow for conditional ownership
-fn normalize(input: &str) -> Cow<'_, str> {
-    if input.contains(' ') {
-        Cow::Owned(input.replace(' ', "_"))
-    } else {
-        Cow::Borrowed(input)
-    }
-}
-```
-
-## Concurrency
-
-See the `rust-concurrency` skill for comprehensive coverage of Send/Sync traits, shared state
-patterns, message passing, async considerations, and deadlock prevention.
-
-## Performance
-
-- Avoid unnecessary allocations; reuse buffers
-- Use iterators over indexed loops
-- Prefer `&[T]` over `&Vec<T>` in function signatures
-- Use `Box<[T]>` for fixed-size heap allocations
-- Profile before optimizing; use `#[inline]` sparingly
-
-## Comments & Documentation
-
-- Document all public items with `///` doc comments
-- Include examples in documentation using ```` ```rust ````
-- Use `//!` for module-level documentation
-- Explain *why*, not *what*; code should be self-explanatory
-- Add `# Panics`, `# Errors`, `# Safety` sections where applicable
-
-```rust
-/// Parses a configuration file from the given path.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be read or contains invalid TOML.
-///
-/// # Examples
-///
-/// ```no_run
-/// # use my_crate::{parse_config, ConfigError};
-/// let config = parse_config("config.toml")?;
-/// # Ok::<(), ConfigError>(())
-/// ```
-pub fn parse_config(path: impl AsRef<Path>) -> Result<Config, ConfigError> {
-    // ...
-}
-```
-
-Doc examples are compiled and run by `cargo test`, so they are part of the quality gate: hide
-setup lines with `# `, end a `?`-using example with `# Ok::<(), E>(())`, and mark examples that
-touch the filesystem or network `no_run` (still compiled, not executed). Use `ignore` only for
-code that cannot compile in isolation.
-
-## Testing
-
-- Place unit tests in `#[cfg(test)]` module within the same file
-- Use descriptive test names: `test_function_scenario_expected_behavior`
-- Use `#[should_panic]` for testing panic conditions
-- Mock external dependencies using traits
-- Integration tests go in `tests/` directory
-
----
-
-## MANDATORY: Quality Gate Before Commits
-
-**These steps MUST be run and pass before any commit or PR. Do NOT skip these steps.**
-
-### 1. Format Code (REQUIRED)
-
-```bash
-cargo fmt --all
-```
-
-- Run this after every code change
-- Fix any formatting issues before proceeding
-- Never commit unformatted code
-
-### 2. Run Clippy Lints (REQUIRED)
-
-```bash
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-```
-
-- All warnings must be resolved (not suppressed without justification)
-- Address each lint, don't just `#[allow(...)]` them
-- If a lint must be suppressed, add a comment explaining why
-
-### 3. Run Tests (REQUIRED)
-
-```bash
-cargo test --workspace --all-features
-```
-
-- All tests must pass
-- Do NOT proceed if any test fails
-- Add tests for new functionality
-
-`--workspace` matters when the root manifest is also a package (otherwise only the root crate is
-checked); it is harmless in a single crate. If the crate has mutually exclusive features,
-`--all-features` fails to build: replace it with the explicit supported feature sets, or
-`cargo hack --each-feature` if `cargo-hack` is installed (ask before installing it).
-
-### 4. Verify Before Commit
-
-Run all checks together:
+Run this before every commit or PR, and fix whatever fails before committing:
 
 ```bash
 cargo fmt --all --check \
@@ -223,20 +55,12 @@ cargo fmt --all --check \
   && cargo test --workspace --all-features
 ```
 
-If the project has a `deny.toml`, also run `cargo deny check` (see the `rust-security` skill).
-
-**If any of these commands fail, fix the issues before committing.**
-
----
-
-## Pre-Review Checklist
-
-Before submitting code for review, verify:
-
-- [ ] MANDATORY Quality Gate passed (see above: fmt, clippy, test)
-- [ ] No `.unwrap()` or `.expect()` in library code
-- [ ] All public items have documentation
-- [ ] Errors include meaningful context
-- [ ] No unnecessary clones or allocations
-- [ ] Tests cover main functionality
-- [ ] No `unsafe` without safety documentation
+- Fix lints rather than silencing them. When one must stay, prefer
+  `#[expect(clippy::lint_name, reason = "...")]` (Rust 1.81+) over `#[allow]`: it warns once
+  the lint no longer fires.
+- `--workspace` matters when the root manifest is also a package (otherwise only the root crate
+  is checked); it is harmless in a single crate.
+- Mutually exclusive features make `--all-features` fail to build. Replace it with the
+  supported feature sets, or `cargo hack --each-feature` if `cargo-hack` is installed (ask
+  before installing it).
+- If the project has a `deny.toml`, also run `cargo deny check` (see `rust-security`).

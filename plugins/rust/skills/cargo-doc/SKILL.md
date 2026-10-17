@@ -5,61 +5,34 @@ name: cargo-doc
 
 # /cargo-doc
 
-Generate and view Rust documentation.
+## Project Docs
 
-## Instructions
-
-Generate documentation for the project's own crates (the default):
+Document the project's own crates (the default); output lands in
+`target/doc/<crate_ident>/index.html`:
 
 ```bash
 cargo doc --no-deps
 ```
 
-Include dependencies only when you need their docs offline (much slower):
+Drop `--no-deps` only when dependency docs are needed offline (much slower). Pass `--open` only
+when the user asks to view the docs in a browser.
 
-```bash
-cargo doc
-```
+## Looking Up a Crate or std
 
-Output lands in `target/doc/<crate_name>/index.html`. Do not pass `--open` unless the user asks
-to view the docs in a browser.
+Take the crate, optional version, and optional item from the request (`$ARGUMENTS` when invoked
+as a command) and WebFetch the page, asking for the overview, the requested item's signature and
+description, and examples.
 
-## Looking Up Crate Documentation
+- Version: when the crate is already a dependency, use the version in `Cargo.lock`; otherwise
+  `latest`.
+- `{crate_ident}` is the crate name with `-` replaced by `_`.
 
-For crate documentation, use docs.rs. Take the lookup target from the request (`$ARGUMENTS` when
-invoked as a command):
+| Target | URL |
+|--------|-----|
+| Crate | `https://docs.rs/{crate}/{version}` |
+| Item | `https://docs.rs/{crate}/{version}/{crate_ident}/{path}` |
+| std | `https://doc.rust-lang.org/std/{path}` |
 
-- Crate name to look up (e.g., `tokio`, `serde`, `axum`)
-- Version (optional; e.g., `1.0.0`). Defaults to latest; prefer the version in `Cargo.lock` when
-  the crate is already a dependency
-- Item (optional): specific function, type, or module to focus on
-
-### URL Structure
-
-| Type | URL Format | Example |
-|------|------------|---------|
-| Latest | `https://docs.rs/{crate}` | `https://docs.rs/tokio` |
-| Specific version | `https://docs.rs/{crate}/{version}` | `https://docs.rs/tokio/1.36.0` |
-| Specific item | `https://docs.rs/{crate}/latest/{crate_ident}/{path}` | `https://docs.rs/serde_json/latest/serde_json/fn.from_str.html` |
-
-`{crate_ident}` is the crate name with `-` replaced by `_` (the Rust identifier), e.g.
-`https://docs.rs/tokio-util/latest/tokio_util/sync/index.html`.
-
-### Execution
-
-When invoked with a crate name, use WebFetch to retrieve the documentation:
-
-```
-WebFetch url="https://docs.rs/{crate}" prompt="Extract the documentation for this Rust crate. Include: 1) Crate overview 2) Key modules and their purposes 3) Important types and traits 4) Usage examples. If a specific item was requested, focus on that item's documentation."
-```
-
-## Standard Library Documentation
-
-For standard library docs, use:
-
-- Base URL: `https://doc.rust-lang.org/std/`
-- Example: `https://doc.rust-lang.org/std/collections/struct.HashMap.html`
-
-```
-WebFetch url="https://doc.rust-lang.org/std/{path}" prompt="Extract the documentation for this Rust standard library item. Include its signature, description, methods, and examples."
-```
+Examples: `https://docs.rs/serde_json/latest/serde_json/fn.from_str.html`,
+`https://docs.rs/tokio-util/latest/tokio_util/sync/index.html`,
+`https://doc.rust-lang.org/std/collections/struct.HashMap.html`.

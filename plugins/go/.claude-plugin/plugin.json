@@ -1,6 +1,6 @@
 {
   "name": "go",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Go development tools for Claude Code - build, test, lint, format, module, and documentation lookup skills; architecture, code style, concurrency, security, TDD, and project layout guidance; and /go:init-dir project initialization",
   "author": {
     "name": "rootwarp",

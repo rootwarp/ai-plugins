@@ -5,28 +5,18 @@ name: cargo-clippy
 
 # /cargo-clippy
 
-Run Clippy linter on the Rust project.
-
-## Instructions
-
-Run Clippy to check for common mistakes and improvements:
+Run Clippy and fix what it reports.
 
 ```bash
 cargo clippy
 ```
 
-For the pre-commit gate (all targets and features, warnings denied — the form the
-`rust-code-style` skill requires):
+The pre-commit gate (the form the `rust-code-style` skill requires) covers every target and
+feature and denies warnings:
 
 ```bash
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-To fix automatically fixable issues (commit or stash first; `--fix` refuses a dirty tree unless
-you add `--allow-dirty`):
-
-```bash
-cargo clippy --fix
-```
-
-Analyze any lint warnings or errors and suggest fixes.
+`cargo clippy --fix` applies the machine-applicable suggestions. It refuses a dirty tree, so
+commit or stash first (or pass `--allow-dirty` when the user agrees).

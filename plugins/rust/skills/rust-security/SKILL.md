@@ -5,72 +5,53 @@ name: rust-security
 
 # Security
 
-- Never hardcode secrets, credentials, or API keys
-- Use environment variables or secure vaults for configuration
-- Validate and sanitize ALL user input; use strong types
-- Use parameterized queries with `sqlx` or similar to prevent SQL injection
-- Escape output properly to prevent XSS in web applications
-- Generate keys and tokens from a CSPRNG: `getrandom::fill`, `rand::rngs::OsRng` (via
-  `TryRngCore` in rand 0.9), or `rand::rng()` (a reseeding ChaCha CSPRNG); never a
-  deterministically seeded RNG (`StdRng::seed_from_u64`) or a non-crypto one (`SmallRng`)
-- Set appropriate timeouts on network operations
-- Use TLS for all network communication (`rustls` or `native-tls`)
-- Minimize use of `unsafe`; document safety invariants when required
-- Run `cargo clippy` to catch potential issues
-- Keep dependencies updated; audit with `cargo deny`
-- Follow principle of least privilege for file permissions
-- Log security events but never log sensitive data
-- Use constant-time comparison for secrets (`subtle` crate)
-- Avoid deserializing untrusted data without validation
-- Use `secrecy` crate for sensitive values in memory
+## Input, Secrets, and Crypto
 
-## Unsafe Code Guidelines
+- Parse untrusted input into strong types at the boundary (newtypes whose constructors validate).
+  Bound sizes before deserializing, and don't deserialize untrusted data straight into internal
+  types.
+- SQL goes through bound parameters (`sqlx::query!` / `.bind()`), never `format!`.
+- Secrets come from the environment or a vault, never source. Wrap them in `secrecy::SecretString`
+  (or `SecretBox`) so they stay out of `Debug` output and logs. Compare them with `subtle`'s
+  constant-time `ct_eq`.
+- Keys and tokens come from a CSPRNG: `getrandom::fill`, `rand::rngs::OsRng` (via `TryRngCore`
+  in rand 0.9), or `rand::rng()` (a reseeding ChaCha CSPRNG). Never use a deterministically
+  seeded RNG (`StdRng::seed_from_u64`) or a non-crypto one (`SmallRng`).
+- TLS via `rustls` (or `native-tls`). Put timeouts on every network operation.
+- Log security events, never the sensitive data in them.
 
-When `unsafe` is necessary:
+## Unsafe Code
+
+Avoid `unsafe` unless a safe abstraction cannot do the job, and wrap it in the smallest safe API
+you can. Every `unsafe fn` documents its contract under `# Safety`, and every `unsafe` block gets
+a `// SAFETY:` comment saying why the invariants hold:
 
 ```rust
-/// Converts a byte slice to a string without UTF-8 validation.
-///
 /// # Safety
 ///
 /// The caller must ensure that `bytes` contains valid UTF-8.
 pub unsafe fn str_from_utf8_unchecked(bytes: &[u8]) -> &str {
-    // SAFETY: Caller guarantees bytes is valid UTF-8
+    // SAFETY: the caller guarantees `bytes` is valid UTF-8.
     unsafe { std::str::from_utf8_unchecked(bytes) }
 }
 ```
 
-Edition 2024 warns on unsafe operations in an `unsafe fn` body that are not wrapped in an
-`unsafe {}` block (`unsafe_op_in_unsafe_fn`), and the clippy gate turns that warning into an
-error — keep the inner block.
+Edition 2024 warns when an `unsafe fn` body performs an unsafe operation outside an `unsafe {}`
+block (`unsafe_op_in_unsafe_fn`), and the clippy gate turns that warning into an error, so keep
+the inner block. Reviewers audit every `unsafe` block.
 
-- Always document `# Safety` requirements
-- Add `// SAFETY:` comments explaining why invariants are upheld
-- Prefer safe abstractions that encapsulate unsafe code
-- Audit all `unsafe` blocks during code review
+## Dependency Auditing
 
-## Dependency Security
-
-First check that the tool is installed:
+Check for the tool with `cargo deny --version`. If it is missing, ask the user before installing
+anything; suggest `cargo install --locked cargo-deny` (or `cargo binstall cargo-deny`).
 
 ```bash
-cargo deny --version
+cargo deny init    # full commented deny.toml, only when none exists (never overwrite)
+cargo deny check   # advisories, licenses, bans, sources
 ```
 
-If it is missing, stop and ask the user before installing anything; suggest
-`cargo install --locked cargo-deny` (or `cargo binstall cargo-deny` for a prebuilt binary). Do
-not install it on your own.
-
-```bash
-# Generate a full, commented deny.toml template (only if none exists; do not overwrite)
-cargo deny init
-
-# Check security advisories, licenses, bans, and sources
-cargo deny check
-```
-
-Example `deny.toml` (cargo-deny v2 config — the old `vulnerability`/`notice` keys were removed;
-matching advisories are errors unless listed in `ignore`):
+Minimal `deny.toml` in the cargo-deny v2 format. The old `vulnerability`/`notice` keys are gone,
+and matching advisories are errors unless listed in `ignore`:
 
 ```toml
 [advisories]

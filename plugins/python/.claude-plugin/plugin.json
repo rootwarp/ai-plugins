@@ -1,6 +1,6 @@
 {
   "name": "python",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Python development tools for Claude Code - pytest, ruff, mypy, uv and doc-lookup skills, code-style/architecture/layout/TDD/security/concurrency guidelines, and project initialization",
   "author": {
     "name": "rootwarp",

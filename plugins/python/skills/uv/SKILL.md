@@ -5,72 +5,17 @@ name: uv
 
 # /python:uv
 
-Manage Python dependencies using uv.
+Change dependencies through uv instead of editing `pyproject.toml` by hand, so `uv.lock` stays
+in sync.
 
-## Instructions
+| Task | Command |
+|------|---------|
+| Install everything from `uv.lock` | `uv sync` |
+| Add runtime dependencies | `uv add httpx "pydantic>=2"` |
+| Add a dev dependency | `uv add --dev <package>` |
+| Remove a dependency | `uv remove <package>` (`--dev` for a dev dependency) |
+| Upgrade one package | `uv lock --upgrade-package <package> && uv sync` |
+| Upgrade everything | `uv lock --upgrade && uv sync` |
+| Run inside the project environment | `uv run python -m <module>` |
 
-### Sync Dependencies
-
-Install all dependencies from `uv.lock`:
-
-```bash
-uv sync
-```
-
-### Add Dependencies
-
-Add a runtime dependency:
-
-```bash
-uv add <package>
-```
-
-Add a dev dependency:
-
-```bash
-uv add --dev <package>
-```
-
-Add multiple packages:
-
-```bash
-uv add httpx pydantic sqlalchemy
-```
-
-Add with version constraint:
-
-```bash
-uv add "httpx>=0.27"
-```
-
-### Remove Dependencies
-
-```bash
-uv remove <package>
-```
-
-### Update Dependencies
-
-Update all dependencies:
-
-```bash
-uv lock --upgrade
-uv sync
-```
-
-Update a specific package:
-
-```bash
-uv lock --upgrade-package <package>
-uv sync
-```
-
-### Run Commands
-
-Run a command in the virtual environment:
-
-```bash
-uv run python -m <module>
-uv run pytest
-uv run ruff check .
-```
+Ask before upgrading everything, because it can pull in many unrelated changes.

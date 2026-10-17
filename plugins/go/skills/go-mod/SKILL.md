@@ -6,21 +6,14 @@ allowed-tools: Bash(go mod tidy:*), Bash(go mod why:*), Bash(go list -m:*), Bash
 
 # /go:go-mod
 
-Manage Go modules.
-
-## Instructions
-
-Tidy the modules after imports change:
+Manage Go modules. After imports change, run:
 
 ```bash
 go mod tidy
 ```
 
-This adds missing requirements and removes unused ones. It needs network access (or a populated
-module cache) and can also rewrite the `go` and `toolchain` lines — review `git diff go.mod
-go.sum` afterwards and point out any directive change to the user.
-
-Other common operations:
+It needs network access (or a populated module cache) and can rewrite the `go` and `toolchain`
+lines. Review `git diff go.mod go.sum` afterwards and point out any directive change to the user.
 
 | Task | Command |
 |------|---------|
@@ -31,7 +24,7 @@ Other common operations:
 | Current versions | `go list -m all` |
 | Track a dev tool (Go 1.24+) | `go get -tool example.com/cmd/tool@version` |
 
-Ask before a broad upgrade (`go get -u ./...`) — it can pull in many unrelated changes.
+Ask before a broad upgrade (`go get -u ./...`), since it can pull in many unrelated changes.
 
-In a workspace (`go.work` present), run tidy inside each module directory; `go work sync` pushes
+In a workspace (`go.work` present), run tidy inside each module directory. `go work sync` pushes
 the workspace's resolved versions back into the member modules.

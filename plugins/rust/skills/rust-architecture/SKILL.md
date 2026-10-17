@@ -5,158 +5,72 @@ name: rust-architecture
 
 # Architecture
 
-Follow [Clean
-Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and
-[Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) principles adapted
-for Rust's ownership model and trait system.
+Clean / Hexagonal Architecture, expressed with Rust's traits and ownership.
 
-## SOLID Principles
+## Layers
 
-- **Single Responsibility** — each module does one thing well; split structs with multiple reasons
-  to change; keep business logic separate from infrastructure (logging, HTTP, database)
-- **Open/Closed** — extend by adding new implementations of existing traits (e.g. a new
-  `Notifier`), not by modifying existing code; prefer composing structs over deep trait
-  hierarchies
-- **Liskov Substitution** — implementations must honor the trait's documented contract (e.g. a
-  `Reader` returns `Ok(0)` at EOF and never reads past `buf.len()`)
-- **Interface Segregation** — keep traits small (1-3 methods); define them at the consumer, not
-  the provider; combine small traits via supertrait bounds rather than growing one large trait
-  (`trait UserRepository: UserReader + UserWriter {}` instead of one fat trait)
-- **Dependency Inversion** — depend on trait bounds (`UserService<R: UserRepository>`) or trait
-  objects (`Box<dyn UserRepository>`); inject dependencies through constructors instead of
-  creating them internally
+| Layer | Responsibility | May depend on |
+|-------|----------------|---------------|
+| Domain | Entities and business rules | Nothing (no framework crates) |
+| Application | Use cases, orchestration, outbound port traits | Domain |
+| Adapters | HTTP/gRPC/CLI handlers (inbound), DB/API clients (outbound) | Application, Domain |
+| Infrastructure | Config loading, wiring, runtime setup | All layers |
 
-## Layered Architecture
-
-Organize code into distinct layers with clear responsibilities:
-
-| Layer | Responsibility | Dependencies |
-|-------|---------------|--------------|
-| Domain | Business entities and rules | None |
-| Application | Use cases, orchestration | Domain |
-| Adapters | External system integration | Application, Domain |
-| Infrastructure | Frameworks, drivers, tools | All layers |
-
-### Dependency Rule
-
-Dependencies point inward only:
-- Domain layer has no external dependencies
-- Application layer depends only on Domain
-- Adapters depend on Application and Domain
-- Infrastructure can depend on all layers
-
-## Recommended Module Structure
+Dependencies point inward only, and modules never import each other in a cycle.
 
 This is the target for a service with real domain logic. A small tool or library starts with the
-minimal layout in the `rust-project-layout` skill and grows into layers when a second adapter or
-a non-trivial business rule appears — do not scaffold empty layers.
+minimal layout in `rust-project-layout` and grows into layers when a second adapter or a
+non-trivial business rule appears. Don't scaffold empty layers.
 
-```
+```text
 src/
-├── lib.rs            # Public API, re-exports
-├── domain.rs         # Declares the domain submodules
-├── domain/           # Business entities and rules
-│   ├── user.rs       # User entity
-│   └── order.rs      # Order entity
-├── application.rs
-├── application/      # Use cases / services
-│   ├── ports.rs      # Outbound ports: the traits the use cases consume
-│   ├── user_service.rs
-│   └── order_service.rs
-├── adapters.rs
-├── adapters/
-│   ├── http.rs       # HTTP handlers (inbound)
-│   ├── grpc.rs       # gRPC handlers (inbound)
-│   └── postgres.rs   # Database implementation (outbound)
-├── infrastructure.rs
-└── infrastructure/
-    ├── config.rs     # Configuration loading
-    └── di.rs         # Dependency injection setup
+├── lib.rs                # public API, re-exports
+├── domain.rs, domain/    # user.rs, order.rs
+├── application.rs, application/
+│   ├── ports.rs          # outbound ports: the traits the use cases consume
+│   └── user_service.rs
+├── adapters.rs, adapters/
+│   ├── http.rs           # inbound
+│   └── postgres.rs       # outbound
+└── infrastructure.rs, infrastructure/
+    ├── config.rs
+    └── di.rs             # wiring
 ```
 
-Module files use the `name.rs` + `name/` form, as in the `rust-project-layout` skill.
+Module files use the `name.rs` + `name/` form (see `rust-project-layout`).
 
-## Ports and Adapters
+## Trait Boundaries
 
-### Inbound Ports (Driving)
+- Declare a port trait in the module that consumes it, normally `application` (`domain` only
+  when a domain service itself makes the call). Adapters import the port, never the reverse.
+- Keep traits to 1-3 methods. Combine them with supertraits
+  (`trait UserRepository: UserReader + UserWriter {}`) instead of growing one fat trait.
+- Inject dependencies through constructors, as generic bounds (`UserService<R: UserRepository>`)
+  by default or trait objects (`Arc<dyn UserRepository>`) when you need runtime selection or
+  heterogeneous collections.
+- Implementations honor the trait's documented contract, so any one can be substituted (a
+  `Reader` returns `Ok(0)` at EOF and never more than `buf.len()`).
+- Extend behavior with a new implementation of an existing trait, not by editing callers.
 
-Entry points that invoke domain logic:
-- HTTP/REST handlers (axum, actix-web)
-- gRPC services (tonic)
-- CLI commands (clap)
-- Message queue consumers
+## Async Ports
 
-### Outbound Ports (Driven)
-
-Traits the use cases need, declared by the module that calls them (normally `application`;
-`domain` only when a domain service itself makes the call):
-- Repository traits
-- External API clients
-- Message publishers
-- Cache traits
+Native `async fn` in traits (Rust 1.75+) needs no macro for generic injection. Declare methods as
+`fn ... -> impl Future<Output = ...> + Send` so callers can spawn the futures on a
+multi-threaded runtime; implementations may still write plain `async fn`:
 
 ```rust
-// Outbound port (application/ports.rs — declared where it is consumed).
-// Native `async fn` in traits (Rust 1.75+); no macro needed for generic injection.
+// application/ports.rs
 pub trait UserRepository: Send + Sync {
-    fn save(&self, user: &User) -> impl Future<Output = Result<(), Error>> + Send;
     fn find_by_id(&self, id: &UserId) -> impl Future<Output = Result<Option<User>, Error>> + Send;
 }
 
-// Adapter implements the port; `async fn` satisfies the `impl Future + Send` signature
-pub struct PostgresUserRepository {
-    pool: PgPool,
-}
-
+// adapters/postgres.rs
 impl UserRepository for PostgresUserRepository {
-    async fn save(&self, user: &User) -> Result<(), Error> {
-        todo!("INSERT ... via self.pool")
-    }
-
     async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, Error> {
         todo!("SELECT ... via self.pool")
     }
 }
-
-// Use case consumes the port through a generic bound
-pub struct UserService<R: UserRepository> {
-    repo: R,
-}
 ```
 
-Writing the trait methods as `fn ... -> impl Future<Output = ...> + Send` (instead of plain
-`async fn`) lets callers spawn the futures on a multi-threaded runtime. Native async traits are
-not dyn-compatible: if you need `Box<dyn UserRepository>` or `Arc<dyn UserRepository>`, annotate
-the trait and impls with `#[async_trait::async_trait]` instead.
-
-## Best Practices
-
-- Keep the domain layer pure; no framework dependencies
-- Use dependency injection via generics or trait objects
-- Define traits in the module that uses them; adapters import the port, never the reverse
-- Test domain logic without infrastructure
-- Use constructor functions to enforce required dependencies
-- Avoid circular dependencies between modules
-
-## Anti-Patterns to Avoid
-
-- **Anemic Domain Model**: Domain objects with only getters/setters, no behavior
-- **Big Ball of Mud**: No clear boundaries between concerns
-- **God Module**: One module that does everything
-- **Leaky Abstractions**: Infrastructure details bleeding into domain
-- **Circular Dependencies**: Modules that import each other
-
----
-
-## Architecture Checklist
-
-Before finalizing design decisions, verify:
-
-- [ ] Domain layer has no external dependencies
-- [ ] Dependencies point inward (toward domain)
-- [ ] Traits defined at consumer, not provider
-- [ ] Each module has a single, clear responsibility
-- [ ] External systems accessed through traits
-- [ ] Business logic testable without infrastructure
-- [ ] No circular dependencies between modules
-- [ ] Constructor functions enforce required dependencies
+Native async traits are not dyn-compatible. If you need `Box<dyn …>` or `Arc<dyn …>`, annotate
+the trait and its impls with `#[async_trait::async_trait]` instead.

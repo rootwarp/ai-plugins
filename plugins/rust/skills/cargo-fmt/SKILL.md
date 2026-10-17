@@ -5,17 +5,13 @@ name: cargo-fmt
 
 # /cargo-fmt
 
-Format Rust source files.
-
-## Instructions
-
-Format all Rust files in the project:
+Format every crate in the workspace:
 
 ```bash
 cargo fmt --all
 ```
 
-To check formatting without making changes:
+Check without writing (CI and the pre-commit gate):
 
 ```bash
 cargo fmt --all --check

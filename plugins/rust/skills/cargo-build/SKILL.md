@@ -5,20 +5,9 @@ name: cargo-build
 
 # /cargo-build
 
-Build the Rust project.
-
-## Instructions
-
-Run the Cargo build command to compile the project:
+Build the Rust project, then diagnose and fix any compile errors.
 
 ```bash
-cargo build
+cargo build             # debug
+cargo build --release   # optimized
 ```
-
-For release builds:
-
-```bash
-cargo build --release
-```
-
-If there are build errors, analyze them and suggest fixes.

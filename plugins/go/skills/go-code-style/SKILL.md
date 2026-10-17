@@ -5,95 +5,51 @@ name: go-code-style
 
 # Code Style
 
-Follow [Effective Go](https://go.dev/doc/effective_go), [Google Go Style
-Guide](https://google.github.io/styleguide/go/best-practices.html), and [Uber Go Style
-Guide](https://github.com/uber-go/guide/blob/master/style.md).
+Baseline: [Effective Go](https://go.dev/doc/effective_go), the [Google Go Style
+Guide](https://google.github.io/styleguide/go/best-practices.html), and the [Uber Go Style
+Guide](https://github.com/uber-go/guide/blob/master/style.md). The rules below are the choices
+this project makes on top of them.
 
-## Formatting
+## Formatting and Naming
 
-- Use `gofmt` / `goimports` for all formatting - no exceptions
-- Keep line length reasonable (~100 characters)
+- Format with `gofmt` / `goimports` (see the `go-fmt` skill); keep lines around 100 columns.
+- Don't encode the type in a name (`users`, not `usersMap`). Short names for short scopes.
+- No generic package names (`utils`, `common`, `helpers`). Name a package for what it provides.
 
-## Naming
+## Organization
 
-- Use meaningful, descriptive names over brevity
-- Avoid type encoding in names (`users` not `usersMap`)
-- Short names for limited scope, longer names for wider scope
-- Avoid generic package names (`utils`, `common`, `helpers`)
-- Name packages for what they provide, not what they contain
-
-## Code Organization
-
-- Group imports: stdlib, external, internal (blank line separated)
-- Export only what needs to be public; prefer unexported by default
-- Prefer fewer, cohesive packages over many tiny ones; split by responsibility (see the
-  `go-architecture` skill), never by kind (`models`, `handlers`, `types`)
-- Use `internal/` for implementation details
-- Group code logically; one concept per file is not required
-- Implement functions by invocation order if possible
+- Import groups: stdlib, external, then the module's own packages.
+- Unexported by default; export only what callers need.
+- Prefer fewer, cohesive packages. Split by responsibility (see the `go-architecture` skill),
+  never by kind (`models`, `handlers`, `types`).
+- One concept per file isn't required. Order functions by invocation where practical.
 
 ## Interfaces
 
-- Define interfaces where consumed, not where implemented
-- Keep interfaces small (1-3 methods ideal)
-- Pass interfaces as values, not pointers
-- Verify interface compliance at compile time:
-  ```go
-  var _ Interface = (*Implementation)(nil)
-  ```
+- Define interfaces where they're consumed and keep them small. Pass them by value, not as
+  pointers to interfaces.
+- Assert compliance at compile time: `var _ Interface = (*Implementation)(nil)`.
 
-## Error Handling
+## Errors
 
-- Return errors, don't panic; reserve panic for truly unrecoverable situations
-- Handle errors exactly once (don't log and return)
-- Add context that the underlying error doesn't provide
-- Use `%w` for wrapping when callers need `errors.Is`/`errors.As`
-- Use sentinel errors or custom types for programmatic handling
+- Return errors; panic only on truly unrecoverable states.
+- Handle an error exactly once. Either log it or return it, not both.
+- Add context the underlying error lacks. Wrap with `%w` only when callers need `errors.Is` /
+  `errors.As`, since wrapping makes the inner error part of your API.
+- Use sentinel errors or custom types for errors callers branch on.
 
-## Concurrency
+## Functions and APIs
 
-See the `go-concurrency` skill for comprehensive race condition prevention, goroutine lifecycle
-management, channel patterns, and sync primitives.
+- `context.Context` is the first parameter of any function that does I/O.
+- Past two or three same-typed parameters that are easy to swap, take a struct
+  (`Send(ctx, Message{To: ..., Subject: ...})`).
+- Return early with guard clauses to keep the happy path unindented.
+- Copy slices and maps at API boundaries when the caller or callee could mutate shared state.
 
 ## Performance
 
-- Prefer `strconv` over `fmt` for conversions
-- Pre-allocate slices/maps with known capacity
-- Avoid repeated string-to-byte conversions
+- `strconv` over `fmt` for conversions.
+- Pre-allocate slices and maps when the size is known.
+- Avoid repeated `string` ↔ `[]byte` conversions in hot paths.
 
-## Comments & Documentation
-
-- Comment exported symbols (godoc format)
-- Explain *why*, not *what* the code does
-- Don't comment bad code - rewrite it
-
-## Functions & API Design
-
-- Use `context.Context` as first parameter for functions that do I/O
-- Avoid long runs of same-typed parameters that are easy to swap; past two or three, group them
-  in a struct (`Send(ctx, Message{To: ..., Subject: ...})`)
-- Return early with guard clauses (line-of-sight coding)
-- Design APIs that are hard to misuse
-
-## Testing
-
-- Use table-driven tests for comprehensive test coverage
-- Name test cases descriptively
-- Test behavior, not implementation
-
----
-
-## Pre-Review Checklist
-
-Before submitting code for review, verify:
-
-- [ ] `gofmt` / `goimports` applied
-- [ ] No exported symbols without documentation
-- [ ] Errors handled exactly once (not logged and returned)
-- [ ] No goroutines without clear shutdown mechanism
-- [ ] Interfaces defined at consumer, not provider
-- [ ] No generic package names (`utils`, `common`, `helpers`)
-- [ ] `context.Context` is first parameter for I/O functions
-- [ ] No panics except for truly unrecoverable situations
-- [ ] Slices/maps copied at API boundaries if shared
-- [ ] Tests cover behavior, not implementation details
+Concurrency rules live in the `go-concurrency` skill, and tests in `go-tdd`.

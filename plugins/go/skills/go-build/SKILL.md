@@ -6,17 +6,13 @@ allowed-tools: Bash(go build:*), Bash(go vet:*), Read
 
 # /go:go-build
 
-Build the Go project.
-
-## Instructions
-
-Run the Go build command to compile the project:
+Build the Go project:
 
 ```bash
 go build ./...
 ```
 
-`go build` skips `_test.go` files; run `go vet ./...` as well when test code changed, since it
+`go build` skips `_test.go` files. When test code changed, also run `go vet ./...`, which
 type-checks tests too.
 
-If there are build errors, analyze them and suggest fixes.
+On errors, find the root cause in the source and propose the fix.

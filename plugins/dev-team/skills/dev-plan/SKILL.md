@@ -8,14 +8,14 @@ argument-hint: [project description or requirements] [--github]
 
 # Development Planning Pipeline
 
-You are the team lead. You take a project idea through eight stages — five LGTM gates, plus two
-more if GitHub publishing is on — to sprint-ready issues on disk. Stage 7 (GitHub issues) is
-optional; every other stage is mandatory.
+You are the team lead. You take a project idea through eight stages and five LGTM gates (two
+more with GitHub publishing) to sprint-ready issues on disk. Stage 7 (GitHub issues) is optional;
+every other stage is mandatory.
 
-The pipeline is **hybrid**: interactive work — the PRD interview and every LGTM gate — runs in
-the main loop (you); heavy fan-out — research, architecture, issue estimation, GitHub rendering —
-runs as background **Workflow** runs over the dev-team agents. No subagent and no workflow can
-reach the user: every question is yours to ask.
+Interactive work (the PRD interview and every gate) runs in the main loop. Heavy fan-out
+(research, architecture, issue estimation, GitHub rendering) runs as background **Workflow** runs
+over the dev-team agents. Subagents and workflows can't reach the user, so every question is
+yours to ask.
 
 | Agent | `agentType` | Role | Runs via |
 |-------|-------------|------|----------|
@@ -27,10 +27,9 @@ reach the user: every question is yours to ask.
 
 ## Output Style
 
-You are a coordinator, not a narrator.
+You coordinate; you don't narrate. Speak only at gates and at wrap-up, within these caps.
 
-- Say nothing between tool calls. Speak at gates and at wrap-up, within the caps below.
-- Gate summaries lead with the numbers, then only what the user must approve — decisions,
+- Gate summaries lead with the numbers, then only what the user must approve: decisions,
   recommendations, recorded assumptions. Never paste a document into the chat.
 - Caps: PRD gate ≤ 12 lines; research, architecture, and plan gates ≤ 15; estimation gate = the
   phase table + ≤ 10 lines; GitHub dry-run = the sync table; wrap-up = the Stage 8 block.
@@ -116,10 +115,9 @@ only name the budget. Keep both when you adapt a prompt.
 | Plan | as few phases as the work needs — usually 1-2 | as few phases as the work needs |
 | Issues | one per plan task by default; split or merge on size — no count cap | same |
 
-Oversized plans come from running the `project` pipeline on a `feature`: every extra research
-angle, module, and phase turns into issues, and every issue costs `/dev-run` a writer, three
-reviewers, and two approvals. When in doubt, pick `feature`. Nothing here limits how many issues
-a plan may have — big work gets many issues; the rules only stop small work from being diced.
+When in doubt, pick `feature`. Running the `project` pipeline on a feature is what oversizes
+plans: every extra angle, module, and phase becomes issues, and each issue costs `/dev-run` a
+writer, three reviewers, and two approvals. Big work still gets as many issues as it needs.
 
 ### Stage 2: PRD (main-loop interview, then Agent tool)
 
@@ -355,10 +353,9 @@ align with your vision? Reply `LGTM` to proceed, or list modules to add, remove,
 
 Phasing is sequential reasoning; one agent, no workflow.
 
-1. Spawn `subagent_type: "dev-team:project-planner"`: the scope (Stage 1 table); read `plan/prd.md`, `plan/research/`, `plan/architecture.md`; write
-   `plan/project-plan.md` with `## Phase N: [Name]` headings and `- [ ] Task N.M` lines;
-   issue-sized tasks (2-3 days, vertical slices, no test/docs/config-only tasks); P2 under
-   `## Later`; budget ≤ 120 lines.
+1. Spawn `dev-team:project-planner` with the scope, the inputs `plan/prd.md`,
+   `plan/research/`, and `plan/architecture.md`, and the output `plan/project-plan.md` per its
+   template. Its `## Phase N: [Name]` headings and `- [ ] Task N.M` lines feed Stage 6.
 2. **Gate — Plan** (≤ 15 lines: one line per phase with its task count, the total task count —
    roughly the number of issues to expect — plus dependency highlights): "Does the
    phasing make sense? Reply `LGTM` to proceed, or list phases to reorder, split, or merge."
@@ -417,28 +414,22 @@ const perPhase = await pipeline(
   (p) => agent(
     'Estimate ONE phase. Inputs: PRD ' + docs.prd + ', architecture ' + docs.architecture +
     ', project plan ' + docs.projectPlan + ', research ' + docs.researchDir + '. Break Phase ' +
-    p.num + ' (' + p.name + ') into 2-3 day issues per the issue-estimator phase template, ' +
-    'Issue Sizing rules, and Output Style: one issue per plan task by default (the plan ' +
-    'lists ' + (p.taskCount || 'an unknown number of') + ' tasks) — split or merge only on ' +
-    'size, and there is no limit on the number of issues; tests, ' +
-    'docs, config, and migrations ship inside the issue that needs them; points 1/2/3/5, ' +
-    'target 2-3 (two to three days), split only over 5; single-stream (no streams, ' +
-    'ownership maps, or scaffold issues); each issue at most 25 lines with concrete files ' +
-    'and functions and checkbox ' +
-    'acceptance criteria. Write ' + phaseFile(p) + '. ' + UNATTENDED +
-    'Return phase, file, issueCount, totalPoints.',
+    p.num + ' (' + p.name + ') into issues per your phase template, Estimation Rules, Issue ' +
+    'Sizing, and Output Style: one issue per plan task by default (the plan lists ' +
+    (p.taskCount || 'an unknown number of') + ' tasks), single-stream. Write ' + phaseFile(p) +
+    '. ' + UNATTENDED + 'Return phase, file, issueCount, totalPoints.',
     { agentType: 'dev-team:issue-estimator', label: 'estimate:p' + p.num, phase: 'Estimate', schema: PHASE_RESULT }
   ),
   (r, p) => r ? agent(
     'Adversarially review the issue breakdown for Phase ' + p.num + ' (' + p.name + ') at ' +
-    r.file + '. Review only; write nothing. Flag both directions: oversizedIssues (over 5 ' +
-    'points, or a 5 with no stated reason) and mergeCandidates (issues under about a day, ' +
-    'issues touching the same files, standalone test/docs/config/refactor issues, anything ' +
-    'the plan or codebase does ' +
-    'not call for — name the issue to merge into). Judge each issue on its size and ' +
-    'cohesion, never on how many issues the phase has. Also flag missing or implicit ' +
-    'dependencies and untestable acceptance criteria. ok is true only when every list is ' +
-    'empty. ' + UNATTENDED + 'Return phase, oversizedIssues, mergeCandidates, missingDeps, ok.',
+    r.file + ' against your Estimation Rules and Issue Sizing. Review only; write nothing. ' +
+    'Flag oversizedIssues (over 5 points, or a 5 with no stated reason); mergeCandidates ' +
+    '(under about a day, same files as another issue, standalone test/docs/config/refactor ' +
+    'work, or not called for by the plan or codebase; name the issue to merge into); and ' +
+    'missingDeps (missing or implicit dependencies, and untestable acceptance criteria). ' +
+    'Judge each issue on size and cohesion, never on how many the phase has. ok is true only ' +
+    'when every list is empty. ' + UNATTENDED +
+    'Return phase, oversizedIssues, mergeCandidates, missingDeps, ok.',
     { agentType: 'dev-team:issue-estimator', label: 'check:p' + p.num, phase: 'Check', schema: CHECK }
   ).then((c) => ({ ...r, check: c, tasks: p.taskCount || null })) : null,
   (r, p) => (r && r.check && !r.check.ok) ? agent(

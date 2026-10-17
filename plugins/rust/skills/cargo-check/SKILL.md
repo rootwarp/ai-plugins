@@ -5,22 +5,14 @@ name: cargo-check
 
 # /cargo-check
 
-Quickly check Rust code for errors without producing binaries.
-
-## Instructions
-
-Run cargo check for fast compilation checking:
+Type-check without code generation, then fix any errors:
 
 ```bash
 cargo check
 ```
 
-This is faster than `cargo build` as it skips code generation.
-
-To check all targets including tests and examples:
+Plain `cargo check` skips tests, examples, and benches; include them with:
 
 ```bash
 cargo check --all-targets
 ```
-
-If there are errors, analyze them and suggest fixes.

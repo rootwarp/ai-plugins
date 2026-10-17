@@ -5,150 +5,64 @@ name: go-architecture
 
 # Architecture
 
-Follow [Clean
-Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and
-[Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) principles adapted
-for Go's idiomatic style.
+Clean / hexagonal architecture, adapted to idiomatic Go.
 
-## SOLID Principles
+## Layers
 
-- **Single Responsibility** — each package does one thing well; split structs with multiple
-  reasons to change; keep business logic separate from infrastructure (logging, HTTP, database)
-- **Open/Closed** — extend by adding new implementations of existing interfaces (e.g. a new
-  `Notifier`), not by modifying existing code; prefer composition over inheritance
-- **Liskov Substitution** — implementations must honor the interface's documented contract (e.g.
-  an `io.Reader` returns `io.EOF` at end and `n <= len(p)`)
-- **Interface Segregation** — keep interfaces small (1-3 methods); define them at the consumer,
-  not the provider; compose larger interfaces from smaller ones (`UserReader` + `UserWriter`
-  instead of a fat `UserStore`)
-- **Dependency Inversion** — accept interfaces, return concrete types; inject dependencies through
-  constructors (`NewOrderService(repo OrderRepository)`) instead of creating them internally
+| Layer | Responsibility | May import |
+|-------|----------------|------------|
+| Domain | Entities and business rules | nothing in the project |
+| Application | Use cases, orchestration, outbound ports | Domain |
+| Adapters | Inbound handlers (HTTP, gRPC, CLI); outbound clients | Application, Domain |
+| Infrastructure | Config, drivers, framework setup | any layer |
 
-## Layered Architecture
+Dependencies point inward. The domain has no framework, database, or transport imports, so its
+logic is testable without infrastructure.
 
-Organize code into distinct layers with clear responsibilities:
+## Target Structure
 
-| Layer | Responsibility | Dependencies |
-|-------|---------------|--------------|
-| Domain | Business entities and rules | None |
-| Application | Use cases, orchestration | Domain |
-| Adapters | External system integration | Application, Domain |
-| Infrastructure | Frameworks, drivers, tools | All layers |
+This is the shape for a service with real domain logic. A small tool or library starts with the
+minimal layout in the `go-project-layout` skill and grows into layers once a second adapter or a
+non-trivial business rule appears. Don't scaffold empty layers.
 
-### Dependency Rule
-
-Dependencies point inward only:
-- Domain layer has no external dependencies
-- Application layer depends only on Domain
-- Adapters depend on Application and Domain
-- Infrastructure can depend on all layers
-
-## Recommended Package Structure
-
-This is the target for a service with real domain logic. A small tool or library starts with the
-minimal layout in the `go-project-layout` skill and grows into layers when a second adapter or a
-non-trivial business rule appears — do not scaffold empty layers.
-
-```
+```text
 internal/
-├── domain/           # Business entities and rules
-│   ├── user.go       # User entity
-│   └── order.go      # Order entity
-├── application/      # Use cases / services
-│   ├── ports.go      # Outbound ports: the interfaces the use cases consume
-│   ├── user_service.go
-│   └── order_service.go
+├── domain/           # entities and rules
+├── application/      # use cases; ports.go holds the outbound interfaces they consume
 ├── adapters/
-│   ├── http/         # HTTP handlers (inbound)
-│   ├── grpc/         # gRPC handlers (inbound)
-│   └── postgres/     # Database implementation (outbound)
+│   ├── http/         # inbound
+│   ├── grpc/         # inbound
+│   └── postgres/     # outbound
 └── infrastructure/
-    └── config/       # Configuration loading
+    └── config/
 ```
 
-Wire dependencies by hand in `cmd/<app>/main.go`: build the adapters, pass them to the
-application constructors, hand those to the inbound adapters. No DI framework or code generator
-is needed.
+Wire everything by hand in `cmd/<app>/main.go`: build the outbound adapters, pass them to the
+application constructors, and hand those to the inbound adapters. A DI framework or code
+generator isn't needed.
 
-## Ports and Adapters
+## Interfaces and Dependencies
 
-### Inbound Ports (Driving)
-
-Entry points that invoke domain logic:
-- HTTP/REST handlers
-- gRPC services
-- CLI commands
-- Message queue consumers
-
-### Outbound Ports (Driven)
-
-Interfaces the use cases need, declared by the package that calls them (normally `application`;
-`domain` only when a domain service itself makes the call):
-- Repository interfaces
-- External API clients
-- Message publishers
-- Cache interfaces
+- Accept interfaces, return concrete types. Inject dependencies through constructors
+  (`NewOrderService(repo OrderRepository)`) so required ones can't be forgotten.
+- Declare an interface in the package that consumes it: normally `application`, or `domain`
+  only when a domain service makes the call itself. Adapters import the port, never the
+  reverse.
+- Keep interfaces small (1-3 methods) and compose them (`UserReader` + `UserWriter` instead
+  of a fat `UserStore`).
+- Implementations honor the documented contract, not just the signature (an `io.Reader`
+  returns `io.EOF` at end and `n <= len(p)`).
 
 ```go
-// application/ports.go — outbound port, declared where it is consumed
-package application
-
+// application/ports.go: the port is declared where it is consumed
 type UserRepository interface {
     Save(ctx context.Context, user *domain.User) error
     FindByID(ctx context.Context, id string) (*domain.User, error)
 }
-```
 
-```go
-// adapters/postgres/user_repository.go — adapter implements the port
-package postgres
-
+// adapters/postgres/user_repository.go: the adapter implements it, checked at compile time
 var _ application.UserRepository = (*UserRepository)(nil)
-
-type UserRepository struct {
-    db *sql.DB
-}
-
-func (r *UserRepository) Save(ctx context.Context, user *domain.User) error {
-    _, err := r.db.ExecContext(ctx,
-        `INSERT INTO users (id, name) VALUES ($1, $2)`, user.ID, user.Name)
-    if err != nil {
-        return fmt.Errorf("save user %s: %w", user.ID, err)
-    }
-    return nil
-}
-
-// FindByID omitted.
 ```
 
-## Best Practices
-
-- Keep the domain layer pure; no framework dependencies
-- Use dependency injection for all external dependencies
-- Define interfaces in the package that uses them; adapters import the port, never the reverse
-- Test domain logic without infrastructure
-- Use constructor functions to enforce required dependencies
-- Avoid circular dependencies between packages
-
-## Anti-Patterns to Avoid
-
-- **Anemic Domain Model**: Domain objects with only getters/setters, no behavior
-- **Big Ball of Mud**: No clear boundaries between concerns
-- **God Package**: One package that does everything
-- **Leaky Abstractions**: Infrastructure details bleeding into domain
-- **Circular Dependencies**: Packages that import each other
-
----
-
-## Architecture Checklist
-
-Before finalizing design decisions, verify:
-
-- [ ] Domain layer has no external dependencies
-- [ ] Dependencies point inward (toward domain)
-- [ ] Interfaces defined at consumer, not provider
-- [ ] Each package has a single, clear responsibility
-- [ ] External systems accessed through interfaces
-- [ ] Business logic testable without infrastructure
-- [ ] No circular dependencies between packages
-- [ ] Constructor functions enforce required dependencies
+Watch for an anemic domain (entities with no behavior), infrastructure types leaking into the
+domain, god packages, and import cycles.
