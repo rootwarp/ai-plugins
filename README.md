@@ -216,6 +216,12 @@ All agents run on Claude Opus 5.5 with a 1M context window.
 
 # Implement all planned issues
 /dev-run all
+
+# Hand bug, security audit, and code review to Codex (needs the openai-codex plugin)
+/dev-run plan/issues/01-phase-1-foundation.md --codex
+
+# Hand only some perspectives to Codex; the rest stay on Claude
+/dev-run all --codex=bug,audit
 ```
 
 #### `/dev-plan` Pipeline
@@ -247,7 +253,9 @@ ask for it, and it shows exactly what it will create before creating anything. I
 2. **Write** - `code-writer` implements each issue in an isolated worktree
 3. **Pre-Review Gate** - Coverage >= 70% on changed files, tests passing, lint clean, all work
    committed, Conventional Commits messages with no plan IDs
-4. **Review** - `code-reviewer` runs quality, security, and bug review
+4. **Review** - `code-reviewer` runs quality, security, and bug review. With `--codex`, the
+   chosen perspectives (`bug`, `audit`, `review`) run on Codex instead of Claude, with a fallback to
+   the Claude agent if a Codex run fails
 5. **Fix Cycle** - Resolve findings; after 3 cycles with Must Fix still open, you choose to keep
    fixing, abort, or merge anyway
 6. **Merge** - The lead asks you to approve the merge and the push to `origin/develop`;

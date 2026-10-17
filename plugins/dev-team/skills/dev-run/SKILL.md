@@ -1,9 +1,9 @@
 ---
 name: dev-run
-description: Development execution pipeline. Orchestrates code-writer and code-reviewer agents to implement issues and review. The code-reviewer acts as review lead, spawning security-auditor and bug-hunter internally for comprehensive review, then merging into develop once no Must Fix finding is open and the user has approved the merge (and, separately, any push).
+description: Development execution pipeline. Orchestrates code-writer and code-reviewer agents to implement issues and review. The code-reviewer acts as review lead, spawning security-auditor and bug-hunter internally for comprehensive review, then merging into develop once no Must Fix finding is open and the user has approved the merge (and, separately, any push). With --codex, Codex runs the bug, audit, and/or review perspectives in place of their Claude agents.
 disable-model-invocation: true
 user-invocable: true
-argument-hint: [phase file or issue ID, e.g. "plan/issues/01-phase-1-foundation.md" or "all"]
+argument-hint: [phase file or issue ID, e.g. "plan/issues/01-phase-1-foundation.md" or "all"] [--codex[=bug,audit,review]]
 ---
 
 # Development Execution Pipeline
@@ -12,7 +12,8 @@ You are the engineering team lead. For each issue you run **Write → Pre-Review
 Fix** with a **code-writer** and a **code-reviewer**. The code-reviewer runs its own review,
 spawns **security-auditor** and **bug-hunter** internally, and merges into `develop` after you
 have put the merge to the user. You spawn security-auditor or bug-hunter yourself only when a
-reviewer returns `Verdict: INCOMPLETE`.
+reviewer returns `Verdict: INCOMPLETE`. With `--codex`, the reviewer hands the chosen
+perspectives to Codex instead of their Claude agents.
 
 Subagents cannot reach the user: every question — queue, findings, blockers, merge — is an
 AskUserQuestion you ask, and you carry the answer back with SendMessage.
@@ -29,7 +30,7 @@ You are a coordinator, not a narrator.
 
 ## Stage 1: Load
 
-1. `$ARGUMENTS`:
+1. `$ARGUMENTS`, after removing any `--codex…` token (step 6):
    - phase file path → read it
    - `all` → Glob `plan/issues/0[1-9]*.md` and `plan/issues/[1-9]*.md`; empty →
      AskUserQuestion for the directory. Never run an empty queue.
@@ -49,14 +50,25 @@ You are a coordinator, not a narrator.
    `git status --porcelain` is empty; as a fallback, an untracked `?? plan/` line alone is
    tolerated (say once that `/dev-plan` can commit it). Anything else → AskUserQuestion before
    switching; never stash or discard.
+6. **Codex (opt-in).** No `--codex` token → `CODEX` is empty and nothing here applies.
+   `--codex` → `CODEX` = `bug,audit,review`; `--codex=<list>` → that comma list. Each name
+   replaces one Claude perspective: `bug` → bug-hunter, `audit` → security-auditor, `review` →
+   the reviewer's own pass. Any other name → stop and list the three valid ones. Then:
+   - `CODEX_COMPANION` = the `installPath` of the `codex@…` entry in
+     `~/.claude/plugins/installed_plugins.json`, plus `/scripts/codex-companion.mjs`.
+   - `node "<CODEX_COMPANION>" setup --json` must report `"ready": true`. No entry, or not
+     ready → AskUserQuestion: "Run without Codex (Claude agents only)" / "Stop (fix with
+     /codex:setup)".
+
+   Pass `CODEX` and `CODEX_COMPANION` to every reviewer.
 
 ## Stage 2: Queue
 
 Order by dependencies (hard gates), then priority P0 > P1 > P2. Single stream by default; honor
 Stream A/B labels only when the user explicitly asked for multi-stream execution.
 
-Present the queue as one line (`1.1 (2pt) → 1.2 (1pt) → …`), AskUserQuestion to approve, then
-TaskCreate one task per issue.
+Present the queue as one line (`1.1 (2pt) → 1.2 (1pt) → …`, ending `· Codex: <CODEX>` when
+set), AskUserQuestion to approve, then TaskCreate one task per issue.
 
 Each issue costs a writer, three reviewers, and two approvals. If the queue holds adjacent
 1-point (under a day) issues that touch the same files, add an option to the approval question: "Batch <ids>
@@ -121,14 +133,17 @@ Gate <issue>: coverage NN% ✓ · tests N ✓ · lint ✓ · committed ✓ · me
 Record `REVIEWED_SHA` = the worktree's `git rev-parse HEAD`. TaskCreate a review task. Spawn
 `subagent_type: "dev-team:code-reviewer"` with `name: reviewer-<issue-id>-c<cycle>` and:
 `REPO_ROOT`, worktree path, branch, `BASE`, issue text and acceptance criteria, gate results
-(coverage, test count, lint), and — on a re-review — the prior findings list, the findings the
-user deferred, and the previous cycle's `REVIEWED_SHA` as `last reviewed sha`. Wait for the
-report; it ends with a verdict (APPROVE if and only if no Must Fix finding is open).
+(coverage, test count, lint), `CODEX` and `CODEX_COMPANION` when set, and — on a re-review —
+the prior findings list, the findings the user deferred, and the previous cycle's
+`REVIEWED_SHA` as `last reviewed sha`. Wait for the report; it ends with a verdict (APPROVE if
+and only if no Must Fix finding is open).
 
 `Verdict: INCOMPLETE` means the reviewer could not spawn its sub-reviewers (nested subagents
-unavailable). Only then do you spawn `dev-team:bug-hunter` and `dev-team:security-auditor`
-yourself, in one message, with the brief it returned; then spawn a fresh reviewer with both
-reports to merge. A review is never complete without all three perspectives.
+unavailable). Only then do you spawn the Claude sub-reviewers it names (`dev-team:bug-hunter`,
+`dev-team:security-auditor`, or both; a perspective that ran on Codex is not re-run)
+yourself, in one message, with the brief it returned; then spawn a fresh reviewer with their
+reports to merge. A review is never complete without all three perspectives, whether each came
+from Claude or Codex.
 
 ### Step 4: Verdict
 
@@ -204,6 +219,7 @@ dependent issue waits until its blocker is merged into `develop`.
    Findings: N total · Must Fix N resolved · Should Fix N resolved · Consider N deferred
    Guarantee: gate ✓ · CR+SEC+BUG on every issue ✓ · Must Fix closed ✓ · merges verified ✓ ·
    integration ✓
+   Codex: <CODEX> · fallbacks to Claude N (<issue>: <perspective>, …)   ← only when CODEX set
    ```
 
 3. AskUserQuestion: "Proceed to Phase N+1" / "Review this phase first" / "Stop here".
@@ -227,7 +243,8 @@ TaskUpdate anything left. Nothing to tear down.
 - Gate thresholds are fixed: coverage ≥ 70% on changed files, tests green, lint clean,
   committed, valid message.
 - Nothing is pushed and nothing is reverted without an AskUserQuestion option that names it.
-- A review missing a perspective is incomplete — re-run it.
+- A review missing a perspective is incomplete — re-run it. A Codex perspective counts only when
+  Codex returned a report; otherwise its Claude agent runs it.
 - "Merge anyway" exists only after 3 cycles and an explicit user override.
 - Post-merge verification and the phase integration check always run.
 

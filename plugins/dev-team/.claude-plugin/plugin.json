@@ -1,6 +1,6 @@
 {
   "name": "dev-team",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Multi-agent development team orchestration - planning pipeline (PRD, research, architecture, project plan, issue estimation) and execution pipeline (code-writer, code-reviewer with security-auditor and bug-hunter)",
   "author": {
     "name": "rootwarp",

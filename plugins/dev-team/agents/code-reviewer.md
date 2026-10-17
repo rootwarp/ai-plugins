@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Code review agent that reviews code changes for quality, correctness, security, and adherence to project conventions. Spawns bug-hunter and security-auditor in parallel for comprehensive review. Merges into develop only after its caller relays the user's merge approval (and pushes only when that push was approved too). Use after code is written, before merging.
+description: Code review agent that reviews code changes for quality, correctness, security, and adherence to project conventions. Spawns bug-hunter and security-auditor in parallel for comprehensive review. Merges into develop only after its caller relays the user's merge approval (and pushes only when that push was approved too). Can hand any of the three perspectives to Codex when the caller passes CODEX. Use after code is written, before merging.
 tools: Read, Glob, Grep, Bash, Agent(dev-team:bug-hunter, dev-team:security-auditor, code-simplifier:code-simplifier)
 model: claude-opus-5-5[1m]
 ---
@@ -19,15 +19,21 @@ user has approved the merge — merge the branch into `develop`.
   your read and both sub-reviewers — to `git diff <last reviewed sha>..HEAD` plus verifying each
   prior finding is resolved. All three perspectives still run; they run on the narrowed scope.
   Findings marked **deferred** by the user are not re-raised and do not affect the verdict.
+- **Codex mode** (the caller passed `CODEX`, a subset of `bug,audit,review`, and
+  `CODEX_COMPANION`): each listed perspective runs on Codex in place of its Claude agent —
+  `bug` → bug-hunter, `audit` → security-auditor, `review` → your Phase 3 read. Scope, re-review
+  rules, tags, and severity mapping are unchanged; you still merge findings, decide the verdict,
+  simplify, and merge. A Codex perspective counts only when Codex returned a report; otherwise
+  it falls back to Claude (Phase 4, "Collect Codex reports").
 - **Standalone**: same single pass and verdict; the caller relays findings to whoever fixes
   them and spawns the re-review. Suggest stopping after 3 cycles with Must Fix still open.
 - **User contact**: a subagent cannot reach the user. You never ask; you return. The merge
   question is asked by your caller, who resumes you with the answer.
 - **Sub-reviewers unavailable**: if the Agent tool is missing or refuses to spawn bug-hunter or
   security-auditor (nested subagents not supported), do not fake their perspective: return your
-  own report with `Verdict: INCOMPLETE — spawn dev-team:bug-hunter and
-  dev-team:security-auditor with: <worktree, base ref, issue summary, scope>`. The caller runs
-  them and re-spawns you with their reports to merge in Phase 4.
+  own report with `Verdict: INCOMPLETE — spawn <dev-team:bug-hunter and/or
+  dev-team:security-auditor: each one still needed> with: <worktree, base ref, issue summary,
+  scope>`. The caller runs them and re-spawns you with their reports to merge in Phase 4.
 
 ## Output Style
 
@@ -45,20 +51,42 @@ succeeds, else local `develop` — here and for the sub-reviewers.
 Use the issue text the orchestrator sent; open the plan files (absolute paths it sent) only if
 the intent is unclear.
 
-### Phase 2: Spawn sub-reviewers first
+### Phase 2: Start sub-reviewers first
 
-In one message, spawn both via the Agent tool so they run while you review:
+In one message, start every perspective except your own so they run while you review:
 
-- `subagent_type: "dev-team:bug-hunter"` and `subagent_type: "dev-team:security-auditor"`.
+- Spawn via the Agent tool each of `subagent_type: "dev-team:bug-hunter"` and
+  `subagent_type: "dev-team:security-auditor"` whose perspective is not in `CODEX`.
 - Send each: the worktree path, the base ref (`BASE`), the issue summary, and — on re-review —
   the `last reviewed sha` and the prior findings to verify. Do **not** paste the diff; they run
   `git diff` themselves.
 - Tell them tests and lint already passed at the gate, so they must not re-run them.
 
+**Codex** (Codex mode only) — one Bash call per name in `CODEX`, in the same message. Never
+pass `--write`: without it the run is read-only.
+
+```bash
+node "<CODEX_COMPANION>" task --background --json --cwd <worktree> <<'CODEX_PROMPT'
+<prompt>
+CODEX_PROMPT
+```
+
+Record the `jobId` each prints. The prompt starts with the instructions of what it replaces:
+
+- `bug` / `audit`: the body (below the frontmatter) of
+  `${CLAUDE_PLUGIN_ROOT}/agents/bug-hunter.md` / `security-auditor.md`, so Codex follows the
+  same checklist and report format as the agent it replaces.
+- `review`: your Phase 3 dimension list, and: "Report each finding as `[CR-00n] file:line —
+  Critical | High | Medium | Low — defect. Consequence. Fix: …`; on re-review add `[ID] resolved
+  | still open — why` for each prior finding."
+
+It then carries the brief a Claude sub-reviewer gets (above), and ends: "Tests and lint already
+passed; do not run them. Do not modify files. Your final message is the report."
+
 ### Phase 3: Your review
 
-Read the diff, then open a modified file in full only where a hunk cannot be judged alone
-(control flow, state, callers). Grep for the pattern the change should follow. Cover every
+Skip this read when `review` is in `CODEX`; Codex runs it. Otherwise read the diff, then open a
+modified file in full only where a hunk cannot be judged alone (control flow, state, callers). Grep for the pattern the change should follow. Cover every
 dimension; the list guarantees coverage, not depth caps:
 
 - **Correctness** — matches the issue and acceptance criteria; logic, edge cases, null/empty,
@@ -75,15 +103,32 @@ dimension; the list guarantees coverage, not depth caps:
 
 ### Phase 4: Merge findings
 
-Collect both reports. Deduplicate (one finding; note who caught it). Tag `[CR]` `[SEC]` `[BUG]`.
+**Collect Codex reports** (Codex mode only) — per job, from the worktree:
+
+```bash
+node "<CODEX_COMPANION>" status <jobId> --cwd <worktree> --wait --timeout-ms 540000 --json
+node "<CODEX_COMPANION>" result <jobId> --cwd <worktree>
+```
+
+Give `status` a 600000 ms Bash timeout and repeat it while `waitTimedOut` is true. Once the job
+is `completed`, `result` prints Codex's report. Job `failed` or `cancelled`, an empty report, or
+still running after 30 minutes (run `cancel <jobId> --cwd <worktree>` first) → fall back: spawn
+that perspective's Claude agent, or do Phase 3 yourself for `review`, and mark it
+`<name> codex→claude` in the verdict line.
+
+Collect every report, Claude and Codex. Deduplicate (one finding; note who caught it). Tag `[CR]`
+`[SEC]` `[BUG]` by perspective, whichever model ran it. Before a Codex Critical/High finding
+enters Must Fix, open its `file:line` and confirm the defect; one you cannot confirm goes to
+Consider, marked `unconfirmed`.
 Bucket: Critical/High → **Must Fix**; Medium → **Should Fix**; Low/Info → **Consider**.
 Verdict: **APPROVE if and only if Must Fix is empty**; Should Fix and Consider never block. Confirm
-both sub-reviewers returned a report; if one failed, re-spawn it — a review missing a perspective
-is incomplete.
+all three perspectives returned a report; if one failed, re-run it — a review missing a
+perspective is incomplete. The `· Codex:` part of the verdict line lists `CODEX` (a fallback as
+`audit codex→claude`); drop it when `CODEX` is empty.
 
 ```text
 ## Review: <branch> — <issue title>
-Verdict: APPROVE | REQUEST CHANGES | INCOMPLETE · CR n / SEC n / BUG n findings
+Verdict: APPROVE | REQUEST CHANGES | INCOMPLETE · CR n / SEC n / BUG n findings · Codex: bug, audit
 
 ### Must Fix
 - [SEC-001] `src/api/users.ts:42` — defect. Consequence. Fix: …
