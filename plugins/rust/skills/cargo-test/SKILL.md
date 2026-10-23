@@ -1,20 +1,20 @@
 ---
-description: 'Run Rust tests with cargo test and analyze failures. Use when asked to run or debug Rust tests.'
+description: 'Run Rust tests with cargo test and analyze the failures. Use when the user asks you to run or debug Rust tests.'
 name: cargo-test
 ---
 
 # /cargo-test
 
-Run the tests, then diagnose any failures. The pre-commit gate in `rust-code-style` uses this
-form:
+Run the tests. Then find the cause of each failure. The pre-commit gate in `rust-code-style` uses
+this form:
 
 ```bash
 cargo test --workspace --all-features
 ```
 
-If `--all-features` fails because features are mutually exclusive, test the supported feature
-sets explicitly (`--features a`, `--no-default-features --features b`).
+Some features cannot be used together. If `--all-features` fails for this reason, test each
+supported feature set explicitly (`--features a`, `--no-default-features --features b`).
 
-- One test, or every test whose name contains the filter: `cargo test <name>`
-- Show `println!`/`dbg!` output from passing tests: `cargo test -- --nocapture`
-- Run tests marked `#[ignore]` (those needing external services): `cargo test -- --ignored`
+- To run one test, or all tests with names that contain the filter: `cargo test <name>`
+- To show the `println!` and `dbg!` output of tests that pass: `cargo test -- --nocapture`
+- To run the tests marked `#[ignore]`, which need external services: `cargo test -- --ignored`

@@ -1,5 +1,5 @@
 ---
-description: 'Rust security: unsafe code guidelines, dependency auditing with cargo deny, input validation. Use when writing unsafe, handling untrusted input or secrets, or adding dependencies.'
+description: 'Rust security: unsafe code guidelines, dependency audits with cargo deny, and input validation. Use when you write unsafe code, handle untrusted input or secrets, or add dependencies.'
 name: rust-security
 ---
 
@@ -7,24 +7,25 @@ name: rust-security
 
 ## Input, Secrets, and Crypto
 
-- Parse untrusted input into strong types at the boundary (newtypes whose constructors validate).
-  Bound sizes before deserializing, and don't deserialize untrusted data straight into internal
-  types.
-- SQL goes through bound parameters (`sqlx::query!` / `.bind()`), never `format!`.
-- Secrets come from the environment or a vault, never source. Wrap them in `secrecy::SecretString`
-  (or `SecretBox`) so they stay out of `Debug` output and logs. Compare them with `subtle`'s
-  constant-time `ct_eq`.
-- Keys and tokens come from a CSPRNG: `getrandom::fill`, `rand::rngs::OsRng` (via `TryRngCore`
-  in rand 0.9), or `rand::rng()` (a reseeding ChaCha CSPRNG). Never use a deterministically
-  seeded RNG (`StdRng::seed_from_u64`) or a non-crypto one (`SmallRng`).
-- TLS via `rustls` (or `native-tls`). Put timeouts on every network operation.
-- Log security events, never the sensitive data in them.
+- At the boundary, parse untrusted input into strong types (newtypes with constructors that
+  validate). Set size limits before you deserialize. Do not deserialize untrusted data directly
+  into internal types.
+- Send SQL through bound parameters (`sqlx::query!` or `.bind()`). Never use `format!`.
+- Get secrets from the environment or a vault, never from the source code. Wrap them in
+  `secrecy::SecretString` (or `SecretBox`). Then they do not appear in `Debug` output and logs.
+  Compare secrets with the constant-time `ct_eq` of `subtle`.
+- Get keys and tokens from a CSPRNG: `getrandom::fill`, `rand::rngs::OsRng` (through
+  `TryRngCore` in rand 0.9), or `rand::rng()` (a ChaCha CSPRNG that reseeds). Never use an RNG
+  with a deterministic seed (`StdRng::seed_from_u64`) or an RNG that is not for cryptography
+  (`SmallRng`).
+- Use `rustls` (or `native-tls`) for TLS. Put a timeout on each network operation.
+- Log security events. Never log the sensitive data in them.
 
 ## Unsafe Code
 
-Avoid `unsafe` unless a safe abstraction cannot do the job, and wrap it in the smallest safe API
-you can. Every `unsafe fn` documents its contract under `# Safety`, and every `unsafe` block gets
-a `// SAFETY:` comment saying why the invariants hold:
+Do not use `unsafe` unless a safe abstraction cannot do the job. Wrap the `unsafe` code in the
+smallest possible safe API. Each `unsafe fn` documents its contract under `# Safety`. Each
+`unsafe` block has a `// SAFETY:` comment that tells why the invariants are true:
 
 ```rust
 /// # Safety
@@ -36,22 +37,23 @@ pub unsafe fn str_from_utf8_unchecked(bytes: &[u8]) -> &str {
 }
 ```
 
-Edition 2024 warns when an `unsafe fn` body performs an unsafe operation outside an `unsafe {}`
-block (`unsafe_op_in_unsafe_fn`), and the clippy gate turns that warning into an error, so keep
-the inner block. Reviewers audit every `unsafe` block.
+Edition 2024 gives a warning when the body of an `unsafe fn` does an unsafe operation outside an
+`unsafe {}` block (`unsafe_op_in_unsafe_fn`). The clippy gate changes that warning into an error.
+Thus, keep the inner block. Reviewers audit each `unsafe` block.
 
-## Dependency Auditing
+## Dependency Audits
 
-Check for the tool with `cargo deny --version`. If it is missing, ask the user before installing
-anything; suggest `cargo install --locked cargo-deny` (or `cargo binstall cargo-deny`).
+Run `cargo deny --version` to find if the tool is installed. If it is not installed, ask the
+user before you install anything. Recommend `cargo install --locked cargo-deny` (or
+`cargo binstall cargo-deny`).
 
 ```bash
 cargo deny init    # full commented deny.toml, only when none exists (never overwrite)
 cargo deny check   # advisories, licenses, bans, sources
 ```
 
-Minimal `deny.toml` in the cargo-deny v2 format. The old `vulnerability`/`notice` keys are gone,
-and matching advisories are errors unless listed in `ignore`:
+This is a minimal `deny.toml` in the cargo-deny v2 format. The v2 format removed the old
+`vulnerability` and `notice` keys. An advisory that matches is an error unless `ignore` lists it:
 
 ```toml
 [advisories]

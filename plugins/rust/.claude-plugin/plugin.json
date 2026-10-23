@@ -1,7 +1,7 @@
 {
   "name": "rust",
-  "version": "0.7.0",
-  "description": "Rust development for Claude Code: cargo build/check/test/clippy/fmt/doc skills, docs.rs lookup, guidance on code style, architecture, concurrency, security, TDD and project layout, and a /rust:init-dir project scaffolder",
+  "version": "0.8.0",
+  "description": "Rust development tools for Claude Code. Skills run cargo build, check, test, clippy, fmt, and doc, and look up docs.rs. Other skills give rules for code style, architecture, concurrency, security, TDD, and project layout. The /rust:init-dir command makes a new project.",
   "author": {
     "name": "rootwarp",
     "email": "rootwarp@gmail.com",

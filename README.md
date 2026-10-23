@@ -185,6 +185,7 @@ Multi-agent development team orchestration with planning and execution pipelines
 |-------|-------------|
 | `/dev-plan` | Full planning pipeline: PRD, research, architecture, project plan, issue estimation, and optional GitHub issue creation |
 | `/dev-run` | Execution pipeline: implement issues via code-writer with code-reviewer quality gates |
+| `/ste-writing` | Write or rewrite prose in ASD-STE100 Simplified Technical English |
 
 #### Agents
 
@@ -201,6 +202,11 @@ Multi-agent development team orchestration with planning and execution pipelines
 | `bug-hunter` | Find potential bugs, edge cases, and race conditions | Opus 5.5 |
 
 All agents run on Claude Opus 5.5 at `high` effort (1M context window by default).
+
+All agents preload the `ste-writing` skill. They write their documents, reports, commit
+messages, and code comments in
+[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/). The language plugins
+apply the same rules to doc comments and error messages in their `<language>-code-style` skills.
 
 <details> <summary>Usage Examples</summary>
 
@@ -271,7 +277,7 @@ description, not on every session.
 
 | Skill | Covers |
 |-------|--------|
-| `<language>-code-style` | Language conventions, formatting, naming |
+| `<language>-code-style` | Language conventions, formatting, naming, STE comments |
 | `<language>-concurrency` | Concurrent programming patterns and safety |
 | `<language>-project-layout` | Standard directory structure |
 | `<language>-tdd` | Test-Driven Development workflow |
@@ -296,7 +302,8 @@ plugins/
 │   │   └── software-architect.md
 │   └── skills/
 │       ├── dev-plan/
-│       └── dev-run/
+│       ├── dev-run/
+│       └── ste-writing/
 ├── go/
 │   ├── .claude-plugin/plugin.json
 │   ├── commands/init-dir.md

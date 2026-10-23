@@ -1,11 +1,11 @@
 ---
-description: 'Python concurrency: asyncio, threads, processes, GIL implications, cancellation. Use when writing async or concurrent code, or sharing state across tasks.'
+description: 'Python concurrency: asyncio, threads, processes, the effects of the GIL, and cancellation. Use when you write async or concurrent code, or share state between tasks.'
 name: python-concurrency
 ---
 
 # Concurrency
 
-## Choosing a Model
+## Select a Model
 
 | Work | Default (GIL) build | Notes |
 |------|---------------------|-------|
@@ -15,43 +15,47 @@ name: python-concurrency
 
 Two newer options change the CPU-bound row:
 
-- **Free-threaded builds** (PEP 703; `python3.14t`): experimental in 3.13 and officially
-  supported since 3.14. Threads run in parallel, so they help CPU-bound work, but every C
-  extension in use must support the build, and code that relied on the GIL for safety needs
-  explicit locks. Check with `sys._is_gil_enabled()`.
+- **Free-threaded builds** (PEP 703, `python3.14t`): These builds are experimental in 3.13. They
+  have official support since 3.14. Threads run in parallel, so they help CPU-bound work. But
+  each C extension that you use must support the build. Code that used the GIL for safety must
+  use explicit locks. To check the build, use `sys._is_gil_enabled()`.
 - **Subinterpreters** (3.14): `concurrent.futures.InterpreterPoolExecutor` gives each worker its
-  own GIL, which is lighter than a process for CPU-bound pure-Python code.
+  own GIL. For CPU-bound pure-Python code, a subinterpreter uses fewer resources than a process.
 
-Prefer the `concurrent.futures` executors as context managers (`with` shuts them down and waits)
-over hand-managed `Thread` or `multiprocessing.Pool` objects. Put process-pool entry code behind
-`if __name__ == "__main__":` because the spawn (macOS, Windows) and forkserver (Linux default
-since 3.14) start methods re-import the main module in every worker, and define worker functions
-at module level so they pickle.
+Use the `concurrent.futures` executors as context managers. The `with` statement shuts down the
+executor and waits for it. Do not manage `Thread` or `multiprocessing.Pool` objects manually.
+
+For a process pool, put the entry code in an `if __name__ == "__main__":` block. The spawn start
+method (macOS, Windows) and the forkserver start method (the Linux default since 3.14) import the
+main module again in each worker. Define worker functions at module level, so that they pickle.
 
 ## Threads
 
-- Guard shared mutable state with `threading.Lock`; use `RLock` only when the same thread
-  re-enters the lock.
-- Pass work between threads through `queue.Queue`, not shared lists.
-- Bound concurrency with an executor's `max_workers` or a `threading.Semaphore`.
-- Give long-running workers a stop signal (`threading.Event`, or a sentinel on the queue) and
-  join them on shutdown.
+- Use `threading.Lock` to protect shared mutable state. Use `RLock` only when the same thread
+  enters the lock again.
+- To send work between threads, use `queue.Queue`. Do not use shared lists.
+- Limit concurrency with the `max_workers` value of an executor or with a `threading.Semaphore`.
+- Give each long-running worker a stop signal (`threading.Event`, or a sentinel on the queue).
+  At shutdown, join the workers.
 
 ## asyncio
 
-Races happen at `await` points: a read, an `await`, then a write based on the read can interleave
-with another task. Hold an `asyncio.Lock` across the whole read-await-write sequence.
+Races occur at `await` points. A task reads a value, then awaits, then writes a value that
+comes from the read. Another task can run between these steps. Hold an `asyncio.Lock` for the
+full read-await-write sequence.
 
-- Run concurrent tasks in an `asyncio.TaskGroup` (3.11+) instead of `gather` or tasks appending
-  to a shared list, and read results from the tasks (input order, below). The group cancels
-  siblings on the first failure and raises an `ExceptionGroup`; handle it with `except*`.
-- Use `asyncio.Lock`, `Semaphore`, `Event`, and `Queue` in async code. A `threading.Lock` held
-  across an `await` blocks the event loop.
-- Move blocking calls (file I/O, CPU work, sync clients) off the loop with
+- Run concurrent tasks in an `asyncio.TaskGroup` (3.11+). Do not use `gather`, and do not let
+  tasks append to a shared list. Read the results from the tasks, in input order (see the example
+  below). On the first failure, the group cancels the other tasks and raises an
+  `ExceptionGroup`. Handle it with `except*`.
+- In async code, use `asyncio.Lock`, `Semaphore`, `Event`, and `Queue`. A `threading.Lock` that
+  is held across an `await` blocks the event loop.
+- Move blocking calls (file I/O, CPU work, sync clients) out of the loop with
   `asyncio.to_thread(...)`.
-- Keep a reference to every `asyncio.create_task(...)` result you don't await, because the loop
-  holds tasks only weakly; better, run background tasks inside a `TaskGroup` you own.
-- Start the program with `asyncio.run(main())`, which cancels leftover tasks on exit.
+- Keep a reference to each `asyncio.create_task(...)` result that you do not await. The loop
+  keeps only weak references to tasks. A better method is to run background tasks in a
+  `TaskGroup` that you own.
+- Start the program with `asyncio.run(main())`. At exit, it cancels the tasks that remain.
 
 ```python
 async def fetch_all(urls: list[str]) -> list[bytes]:
@@ -62,8 +66,9 @@ async def fetch_all(urls: list[str]) -> list[bytes]:
 
 ## Cancellation and Timeouts
 
-Cancellation arrives as `asyncio.CancelledError` at the next `await`. Clean up and re-raise:
-swallowing it breaks `TaskGroup`, `asyncio.timeout()`, and shutdown.
+A cancellation comes as `asyncio.CancelledError` at the next `await`. Do the cleanup and raise
+the error again. If you swallow the error, `TaskGroup`, `asyncio.timeout()`, and shutdown stop
+working correctly.
 
 ```python
 async def worker(queue: asyncio.Queue[Job]) -> None:
@@ -78,16 +83,17 @@ async def worker(queue: asyncio.Queue[Job]) -> None:
             queue.task_done()
 ```
 
-- `except Exception:` does not catch `CancelledError` (3.8+); `except BaseException:` and bare
-  `except:` do, so re-raise it there.
-- Bound a block of awaits with `async with asyncio.timeout(5):` (3.11+), which raises
-  `TimeoutError`.
-- Use `asyncio.shield()` only for work that must finish, such as a commit; the caller is still
-  cancelled.
+- `except Exception:` does not catch `CancelledError` (3.8+). But `except BaseException:` and a
+  bare `except:` catch it. In these handlers, raise it again.
+- To set a time limit on a block of awaits, use `async with asyncio.timeout(5):` (3.11+). It
+  raises `TimeoutError`.
+- Use `asyncio.shield()` only for work that must complete, for example a commit. The caller is
+  still cancelled.
 
 ## Check-Then-Act and Lazy Initialization
 
-- Hold one lock across the check and the act (`if key not in cache: cache[key] = compute()`).
-  `cache.setdefault(key, compute())` is atomic but still runs `compute()` on every call.
-- For a process-wide cached value, prefer `functools.cache` on a function over a hand-written
-  singleton; when a lazy singleton is unavoidable, use double-checked locking.
+- Hold one lock for both the check and the action
+  (`if key not in cache: cache[key] = compute()`). `cache.setdefault(key, compute())` is atomic,
+  but it runs `compute()` on each call.
+- For a cached value for the full process, use `functools.cache` on a function. Do not write a
+  singleton manually. If you must use a lazy singleton, use double-checked locking.

@@ -1,17 +1,17 @@
 ---
-description: 'Fast type-check with cargo check without producing binaries. Use for quick Rust error checking.'
+description: 'Do a fast type check with cargo check. It does not make binaries. Use when you must find Rust errors quickly.'
 name: cargo-check
 ---
 
 # /cargo-check
 
-Type-check without code generation, then fix any errors:
+Do a type check without code generation. Then fix the errors:
 
 ```bash
 cargo check
 ```
 
-Plain `cargo check` skips tests, examples, and benches; include them with:
+Plain `cargo check` skips tests, examples, and benches. To include them, use this command:
 
 ```bash
 cargo check --all-targets

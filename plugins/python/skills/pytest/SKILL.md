@@ -1,11 +1,11 @@
 ---
-description: 'Run Python tests with pytest via uv and analyze failures. Use when asked to run or debug Python tests.'
+description: 'Run Python tests with pytest through uv and analyze the failures. Use when the user asks you to run or debug Python tests.'
 name: pytest
 ---
 
 # /python:pytest
 
-Run the project's tests through uv:
+Run the tests of the project through uv:
 
 ```bash
 uv run pytest                                   # whole suite
@@ -14,10 +14,10 @@ uv run pytest -v -s                             # verbose, show print output
 uv run pytest --cov=<package_name> --cov-report=term-missing
 ```
 
-`--cov` needs `pytest-cov`; leave it off when `addopts` already sets it (the `/python:init-dir`
-config does).
+The `--cov` flag needs `pytest-cov`. Do not give this flag if `addopts` already sets it. The
+`/python:init-dir` configuration sets it.
 
-`Failed to spawn: pytest` means pytest is not a dev dependency. Ask before running
-`uv add --dev pytest` (plus `pytest-cov` when coverage is needed).
+The message `Failed to spawn: pytest` tells you that pytest is not a dev dependency. Ask the
+user before you run `uv add --dev pytest`. If the user needs coverage, also add `pytest-cov`.
 
-If tests fail, analyze the failures and suggest fixes.
+If tests fail, analyze the failures and recommend fixes.

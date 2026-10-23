@@ -1,12 +1,12 @@
 ---
-description: 'Run Ruff lint and format via uv. Use when asked to lint or format Python code.'
+description: 'Run the Ruff linter and formatter through uv. Use when the user asks you to lint or format Python code.'
 name: ruff
 ---
 
 # /python:ruff
 
-Ruff reads its rules and `line-length` from `[tool.ruff]` in `pyproject.toml` (default 88;
-projects created with `/python:init-dir` use 79).
+Ruff reads its rules and `line-length` from `[tool.ruff]` in `pyproject.toml`. The default
+line length is 88. Projects that `/python:init-dir` creates use 79.
 
 ```bash
 uv run ruff check .              # lint, read-only
@@ -15,11 +15,11 @@ uv run ruff check --fix .        # rewrites files
 uv run ruff format .             # rewrites files
 ```
 
-Run the rewriting commands only when the user asked for fixes or formatting; otherwise report
-the findings and ask. To fix and format together:
-`uv run ruff check --fix . && uv run ruff format .`
+Run the commands that rewrite files only if the user asked for fixes or for formatting. If not,
+report the findings and ask the user. To fix and format in one command, run
+`uv run ruff check --fix . && uv run ruff format .`.
 
-`Failed to spawn: ruff` means Ruff is not a dev dependency. Run it one-off with
-`uvx ruff check .`, or ask before running `uv add --dev ruff`.
+The message `Failed to spawn: ruff` tells you that Ruff is not a dev dependency. Run it one time
+with `uvx ruff check .`. Alternatively, ask the user before you run `uv add --dev ruff`.
 
-Analyze any remaining warnings or errors and suggest fixes.
+Analyze the warnings and errors that remain, and recommend fixes.

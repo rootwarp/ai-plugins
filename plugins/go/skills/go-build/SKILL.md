@@ -1,5 +1,5 @@
 ---
-description: 'Build the Go project with go build and analyze any build errors. Use when asked to build or compile Go code.'
+description: 'Build the Go project with go build and analyze the build errors. Use when the user asks you to build or compile Go code.'
 name: go-build
 allowed-tools: Bash(go build:*), Bash(go vet:*), Read
 ---
@@ -12,7 +12,7 @@ Build the Go project:
 go build ./...
 ```
 
-`go build` skips `_test.go` files. When test code changed, also run `go vet ./...`, which
-type-checks tests too.
+`go build` does not compile `_test.go` files. If test code changed, also run `go vet ./...`.
+This command also does a type check of the tests.
 
-On errors, find the root cause in the source and propose the fix.
+If the build fails, find the root cause in the source and propose a fix.

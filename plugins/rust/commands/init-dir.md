@@ -1,39 +1,39 @@
 ---
-description: Initialize a Rust project (binary, library, or workspace) with Cargo, rustfmt, clippy, and cargo-deny config
+description: Initialize a Rust project (binary, library, or workspace) with Cargo, rustfmt, clippy, and cargo-deny configuration
 ---
 
 # /rust:init-dir
 
-Initialize a Rust project with Cargo configuration and common setup.
+Initialize a Rust project with a Cargo configuration and the usual setup files.
 
 ## Instructions
 
-### Step 1: Gather Information
+### Step 1: Get the Information
 
-Ask the user for whatever the request did not already answer:
+Ask the user for each item that the request does not give:
 
 1. **Project type:** Binary (recommended), Library, or Workspace (multi-crate)
 2. **Project name** (package name and directory)
 3. **Dependencies:** async runtime (tokio / smol / none), serde, clap, and error handling
    (`thiserror` for libraries, `anyhow` for binaries)
-4. **License** (default `MIT OR Apache-2.0`) and **repository URL**. With no URL, omit the
-   `repository` field rather than writing a placeholder.
+4. **License** (default `MIT OR Apache-2.0`) and **repository URL**. If there is no URL, do
+   not write the `repository` field. Do not write a placeholder.
 5. **Optional files:** `rustfmt.toml`, `rust-toolchain.toml`, `deny.toml`, `Makefile`. Create
-   only the ones selected.
+   only the files that the user selects.
 
-### Step 2: Check for an Existing Project
+### Step 2: Check if a Project Exists
 
-- `<project-name>/Cargo.toml` already exists → stop and ask how to proceed. Never overwrite an
-  existing manifest or sources.
-- The directory exists and is not empty → list its contents and ask before continuing.
+- If `<project-name>/Cargo.toml` exists, stop and ask the user what to do. Never overwrite a
+  manifest or source files that exist.
+- If the directory exists and is not empty, list its contents. Ask the user before you continue.
 
-If any `cargo` command below fails, stop, show the error, and ask the user. Don't work around
-it with `--force` or by deleting files.
+If a `cargo` command below fails, stop. Show the error and ask the user. Do not use `--force` or
+delete files to go around the error.
 
 ### Step 3: Initialize with Cargo
 
-`cargo init` creates `src/`, a starter `.gitignore`, and a git repository (unless the directory
-is already inside one).
+`cargo init` creates `src/`, a starter `.gitignore`, and a git repository. It does not create
+the repository if the directory is already in a git repository.
 
 **Binary Project:**
 
@@ -49,11 +49,11 @@ cargo init --lib <project-name>
 cd <project-name>
 ```
 
-Add `tests/`, `examples/`, and `benches/` when their first file exists (see
+Add `tests/`, `examples/`, and `benches/` when you add their first file (see
 `rust-project-layout`).
 
-**Workspace Project:** write the root manifest before creating members, so `cargo new` fills in
-`version.workspace = true` and the other inherited keys:
+**Workspace Project:** Write the root manifest before you create the members. Then `cargo new`
+adds `version.workspace = true` and the other inherited keys:
 
 ```bash
 mkdir <project-name>
@@ -61,8 +61,8 @@ cd <project-name>
 git init
 ```
 
-Root `Cargo.toml` (a virtual workspace has no `[package]` to infer the resolver from, so
-`resolver = "3"` is explicit):
+Root `Cargo.toml`: A virtual workspace has no `[package]` that gives the resolver, so
+`resolver = "3"` is explicit:
 
 ```toml
 [workspace]
@@ -80,8 +80,8 @@ repository = "<repository-url>"   # omit if none
 # Shared dependency versions; members opt in with `<dep>.workspace = true`
 ```
 
-Create the members, prefixing package names with the project name (a bare `core` clashes with
-the built-in crate):
+Create the members. Start each package name with the project name, because a package that has
+only the name `core` has a conflict with the built-in crate:
 
 ```bash
 cargo new --lib --vcs none crates/core --name <project-name>-core
@@ -90,8 +90,8 @@ cargo new --vcs none crates/cli --name <project-name>-cli
 
 ### Step 4: Configure Cargo.toml
 
-**Single crate:** keep the generated `name`, `version`, and `edition`; add these keys under
-`[package]`, plus the release profile:
+**Single crate:** Keep the generated `name`, `version`, and `edition`. Add these keys under
+`[package]`, and add the release profile:
 
 ```toml
 rust-version = "1.85"
@@ -104,13 +104,13 @@ lto = true
 strip = true
 ```
 
-**Workspace:** members already inherit `version`, `edition`, `rust-version`, `license`, and
-`repository` from `[workspace.package]`; add `description` per member.
+**Workspace:** The members already inherit `version`, `edition`, `rust-version`, `license`, and
+`repository` from `[workspace.package]`. Add a `description` to each member.
 
 ### Step 5: Add Selected Dependencies
 
-Use `cargo add` so versions resolve to the latest compatible release rather than hand-written
-numbers.
+Use `cargo add`. It sets each version to the latest compatible release. Do not write version
+numbers by hand.
 
 **Single crate:**
 
@@ -132,15 +132,15 @@ cargo add thiserror
 cargo add anyhow
 ```
 
-**Workspace:** add each shared dependency to the root `[workspace.dependencies]` (e.g.
-`serde = { version = "1", features = ["derive"] }`), then run `cargo add <dep> -p <member>`,
-which writes `<dep>.workspace = true` in the member.
+**Workspace:** Add each shared dependency to the root `[workspace.dependencies]`, for example
+`serde = { version = "1", features = ["derive"] }`. Then run `cargo add <dep> -p <member>`. This
+command writes `<dep>.workspace = true` in the member.
 
 ### Step 6: Create Source Files
 
-`<crate_ident>` below is the package name with `-` replaced by `_`.
+In the files below, `<crate_ident>` is the package name with each `-` changed to `_`.
 
-**Binary:** keep `main.rs` minimal and put the logic in `lib.rs`.
+**Binary:** Keep `main.rs` minimal. Put the logic in `lib.rs`.
 
 `src/main.rs`:
 
@@ -166,7 +166,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-(With `anyhow` selected, return `anyhow::Result<()>` from both instead.)
+If the user selects `anyhow`, return `anyhow::Result<()>` from both functions.
 
 **Library** (`src/lib.rs`):
 
@@ -197,7 +197,7 @@ mod tests {
 
 ### Step 7: Write .gitignore
 
-Replace the generated `.gitignore` (for a workspace, create it at the root):
+Replace the generated `.gitignore`. For a workspace, create it at the root:
 
 ```gitignore
 # Generated by Cargo
@@ -232,13 +232,14 @@ lcov.info
 tarpaulin-report.html
 ```
 
-`Cargo.lock` stays tracked, for binaries and libraries alike. Ignore it only if the user
-explicitly asks to for a library.
+Keep `Cargo.lock` tracked for binaries and also for libraries. Ignore it only if the user
+explicitly asks for this for a library.
 
 ### Step 8: Write rustfmt.toml (optional)
 
-Only if selected. `cargo fmt` already reads the edition from `Cargo.toml`. This file makes
-direct `rustfmt` runs (editors, pre-commit hooks) agree:
+Write this file only if the user selects it. `cargo fmt` already reads the edition from
+`Cargo.toml`. This file gives the same edition to direct `rustfmt` runs (editors, pre-commit
+hooks):
 
 ```toml
 edition = "2024"
@@ -246,8 +247,8 @@ edition = "2024"
 
 ### Step 9: Write clippy.toml (only for non-default settings)
 
-Only for a non-default lint setting the user wants; Clippy already reads the MSRV from
-`rust-version`. Example:
+Write this file only for a non-default lint setting that the user wants. Clippy already reads
+the MSRV from `rust-version`. Example:
 
 ```toml
 too-many-arguments-threshold = 5   # default is 7
@@ -255,7 +256,8 @@ too-many-arguments-threshold = 5   # default is 7
 
 ### Step 10: Write rust-toolchain.toml (optional)
 
-Only if selected. It pins the toolchain for everyone on the project:
+Write this file only if the user selects it. It pins the toolchain for all people on the
+project:
 
 ```toml
 [toolchain]
@@ -265,9 +267,10 @@ components = ["rustfmt", "clippy"]
 
 ### Step 11: Write deny.toml (optional)
 
-Only if selected. If `cargo deny --version` succeeds, prefer `cargo deny init` for the full
-commented template. Otherwise write the minimal v2 config below and tell the user it needs
-`cargo install --locked cargo-deny`; don't install it yourself (see `rust-security`):
+Write this file only if the user selects it. If `cargo deny --version` succeeds, use
+`cargo deny init` to get the full template with comments. If not, write the minimal v2
+configuration below. Tell the user that it needs `cargo install --locked cargo-deny`. Do not
+install it yourself (see `rust-security`):
 
 ```toml
 [advisories]
@@ -282,7 +285,7 @@ multiple-versions = "warn"
 
 ### Step 12: Create Makefile (optional)
 
-Only if selected:
+Create this file only if the user selects it:
 
 ```makefile
 .PHONY: all build build-release run test test-verbose lint fmt fmt-check audit clean doc help
@@ -326,11 +329,12 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 ```
 
-Omit the `run` target for a library.
+For a library, do not write the `run` target.
 
-### Step 13: Display Result
+### Step 13: Show the Result
 
-Show the created structure (`tree` or `ls -la`), then run the `rust-code-style` quality gate:
+Show the structure that you created (`tree` or `ls -la`). Then run the `rust-code-style`
+quality gate:
 
 ```bash
 cargo fmt --all
@@ -338,10 +342,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-If `deny.toml` was created and `cargo-deny` is installed, also run `cargo deny check`.
+If you created `deny.toml` and `cargo-deny` is installed, also run `cargo deny check`.
 
 ## Rules
 
-- Start from `cargo init` / `cargo new`, and never overwrite an existing project.
-- Edition 2024 with `rust-version` set. Commit `Cargo.lock`.
-- Ask before installing any tool.
+- Start with `cargo init` or `cargo new`. Never overwrite a project that exists.
+- Use edition 2024, and set `rust-version`. Commit `Cargo.lock`.
+- Ask before you install a tool.

@@ -1,5 +1,5 @@
 ---
-description: 'Go concurrency: goroutines, channels, context, sync primitives, leak and race avoidance. Use when writing concurrent code or sharing state across goroutines.'
+description: 'Go concurrency: goroutines, channels, context, sync primitives, leak and race avoidance. Use when you write concurrent code or share state across goroutines.'
 name: go-concurrency
 ---
 
@@ -7,14 +7,14 @@ name: go-concurrency
 
 ## Race Detector
 
-Run concurrent code's tests with `go test -race ./...`, in CI as well. `-race` needs cgo and a C
-compiler. Where those are missing, say the race detector was skipped rather than dropping it
-silently.
+Run the tests of concurrent code with `go test -race ./...`. Do this in CI also. `-race` needs
+cgo and a C compiler. If they are not available, tell the user that the race detector did not
+run. Do not remove it silently.
 
 ## Goroutine Lifecycle
 
-Every goroutine needs a way to stop and a way for its owner to wait for it. Long-running work
-inside it honors `ctx` too.
+Each goroutine must have a way to stop. Its owner must have a way to wait for it. Long work in
+the goroutine must also obey `ctx`.
 
 ```go
 func startWorker(ctx context.Context) <-chan struct{} {
@@ -36,14 +36,14 @@ func startWorker(ctx context.Context) <-chan struct{} {
 }
 ```
 
-Don't wrap the work in a `select` with an empty `default:`. It busy-spins and only notices
-cancellation between calls.
+Do not put the work in a `select` with an empty `default:`. That loop uses the CPU continuously.
+Also, it sees the cancellation only between calls.
 
 ### Fan-out
 
-- **Goroutines that can fail:** use `golang.org/x/sync/errgroup`. It waits for all of them,
-  returns the first error, cancels the shared context, and bounds concurrency, which replaces
-  a hand-rolled worker pool:
+- **Goroutines that can fail:** Use `golang.org/x/sync/errgroup`. It waits for all goroutines,
+  returns the first error, and cancels the shared context. It also sets a limit on
+  concurrency. Thus you do not need a custom worker pool.
 
   ```go
   g, ctx := errgroup.WithContext(ctx)
@@ -54,20 +54,20 @@ cancellation between calls.
   return g.Wait()
   ```
 
-- **Goroutines that can't fail:** use `wg.Go(func() { ... })` (Go 1.25+), which does the
-  `Add`/`Done` bookkeeping. When `go.mod` declares an older `go` version, call `wg.Add(1)`
-  before the `go` statement and `defer wg.Done()` inside it.
-- **Loop variables:** they're per-iteration since Go 1.22. Below 1.22 (check `go.mod`), pass
-  the loop variable to the goroutine as an argument.
+- **Goroutines that cannot fail:** Use `wg.Go(func() { ... })` (Go 1.25+). It calls `Add` and
+  `Done` for you. If `go.mod` declares an older `go` version, call `wg.Add(1)` before the `go`
+  statement. Then call `defer wg.Done()` in the goroutine.
+- **Loop variables:** Since Go 1.22, each iteration has its own loop variable. Before 1.22
+  (look in `go.mod`), give the loop variable to the goroutine as an argument.
 
 ## Channels
 
-- Only the sender closes a channel. Closing a nil or closed channel panics, and so does sending
-  on a closed one.
-- In a `select` over several inputs, set a channel to `nil` once it's closed so its case stops
-  firing, and exit when all are nil.
-- A send inside a loop also selects on `ctx.Done()`. A bare `out <- v` blocks forever once the
-  receiver has gone:
+- Only the sender closes a channel. A close of a nil or closed channel causes a panic. A send on
+  a closed channel also causes a panic.
+- In a `select` on many inputs, set a channel to `nil` after it closes. Then its case does not
+  fire again. Exit when all the channels are nil.
+- A send in a loop must also select on `ctx.Done()`. A bare `out <- v` blocks forever after the
+  receiver stops:
 
   ```go
   select {
@@ -77,21 +77,26 @@ cancellation between calls.
   }
   ```
 
-- Sizing: unbuffered for synchronization, size 1 for signals that may coalesce, a known bound
-  for work queues. Large buffers hide backpressure problems, so each buffer size needs a reason.
+- Buffer size:
+  - Use an unbuffered channel for synchronization.
+  - Use size 1 for signals that can coalesce.
+  - Use a known bound for work queues.
+
+  Large buffers hide backpressure problems. Thus each buffer size must have a reason.
 
 ## Shared State
 
-- Guard shared maps and slices with a `sync.Mutex` by default. Use `sync.RWMutex` only for
-  measurably read-heavy access. Use `sync.Map` only for its documented cases: keys written
-  once and read many times, or goroutines working on disjoint key sets.
-- Check-then-act (`if _, ok := m[k]; !ok { m[k] = compute() }`) is a race. Hold one lock across
-  the check and the write. When `compute` is expensive and concurrent callers should share one
-  result, use `golang.org/x/sync/singleflight`.
-- Return copies of internal slices and maps from locked methods. Returning the field hands the
-  caller unsynchronized access.
+- By default, protect shared maps and slices with a `sync.Mutex`. Use `sync.RWMutex` only if
+  measurements show that most access is reads. Use `sync.Map` only for its documented cases:
+  - Keys that are written one time and read many times
+  - Goroutines that use disjoint sets of keys
+- A check followed by an action (`if _, ok := m[k]; !ok { m[k] = compute() }`) is a race. Hold
+  one lock for the check and the write. If `compute` is expensive and concurrent callers must
+  share one result, use `golang.org/x/sync/singleflight`.
+- Locked methods must return copies of internal slices and maps. If a method returns the field,
+  the caller gets access without synchronization.
 - Use `sync/atomic` types (`atomic.Int64`, `atomic.Bool`) for counters and flags.
-- Use `sync.OnceValue` / `sync.OnceValues` for genuinely process-wide lazy values (compiled
-  regexps, lookup tables) and `sync.Once` for side effects. Config, clients, and repositories
-  are built in `main` and passed through constructors, not hidden behind a once-initialized
-  global (see the `go-architecture` skill).
+- Use `sync.OnceValue` or `sync.OnceValues` for lazy values that the full process shares
+  (compiled regexps, lookup tables). Use `sync.Once` for side effects. Make config, clients,
+  and repositories in `main`, and give them through constructors. Do not hide them in a global
+  that a once function initializes (see the `go-architecture` skill).

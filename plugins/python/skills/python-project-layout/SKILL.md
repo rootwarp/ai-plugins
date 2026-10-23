@@ -1,12 +1,12 @@
 ---
-description: 'Python project layout: src layout, package and module structure, entry points. Use when adding a module or package, or setting up a project.'
+description: 'Python project layout: src layout, package and module structure, and entry points. Use when you add a module or package, or set up a project.'
 name: python-project-layout
 ---
 
 # Project Layout
 
 Follow the [Python Packaging User Guide](https://packaging.python.org/). `pyproject.toml` is the
-single configuration file; uv manages dependencies (see the `uv` skill).
+only configuration file. uv manages the dependencies (see the `uv` skill).
 
 ## src Layout (default)
 
@@ -25,32 +25,35 @@ project/
     └── test_main.py
 ```
 
-The src layout keeps tests running against the installed package rather than the working
-directory. Grow it toward the layers in the `python-architecture` skill only when the code calls
-for them.
+With the src layout, the tests run against the installed package, not against the working
+directory. Change it to the layers in the `python-architecture` skill only when the code needs
+them.
 
 ## Flat Layout (simple scripts)
 
-What `/python:init-dir` creates for a Simple Script: `main.py` at the root, a `tests/` directory,
-no package and no build system. Move to the src layout once it needs more than a couple of
-modules or an installable entry point.
+`/python:init-dir` creates this layout for a Simple Script. It has `main.py` at the root and a
+`tests/` directory. It has no package and no build system. Change to the src layout when the
+script needs more than two or three modules, or an installable entry point.
 
 ## Rules
 
-- Ship `py.typed` in every typed package.
-- Keep `__init__.py` minimal: a docstring, `__version__`, and re-exports listed in `__all__`.
-- One logical concept per module; avoid catch-all names such as `utils.py` or `helpers.py`.
-- Tests mirror the source: `src/mypackage/billing.py` → `tests/test_billing.py`.
-- Create `docs/`, `scripts/`, and `data/` with their first file, not before; `data/` never holds
-  secrets.
+- Include `py.typed` in each typed package.
+- Keep `__init__.py` minimal: a docstring, `__version__`, and the re-exports in `__all__`.
+- Put one logical concept in each module. Do not use general names such as `utils.py` or
+  `helpers.py`.
+- The test files have the same structure as the source files: `src/mypackage/billing.py` has
+  the tests in `tests/test_billing.py`.
+- Create `docs/`, `scripts/`, and `data/` when you add their first file, not before. Never put
+  secrets in `data/`.
 - Declare console entry points in `[project.scripts]`.
 
 ## pyproject.toml
 
-- `requires-python = ">=3.11"` or newer.
-- `license` is an SPDX expression (`license = "MIT"`). Don't add `License ::` classifiers next to
-  it: PEP 639 supersedes them, and setuptools 77+ refuses to build.
-- Build backend: hatchling (what `/python:init-dir` uses).
-- Tool configuration (`[tool.ruff]`, `[tool.mypy]`, `[tool.pytest.ini_options]`) comes from
-  Step 5 of `/python:init-dir`, the canonical config, and the dev tools from its Step 11; don't
-  keep a diverging copy.
+- Set `requires-python = ">=3.11"` or a newer version.
+- `license` is an SPDX expression (`license = "MIT"`). Do not add `License ::` classifiers with
+  it. PEP 639 replaces these classifiers, and setuptools 77+ does not build the project if they
+  are present.
+- Build backend: use hatchling (`/python:init-dir` uses it).
+- The tool configuration (`[tool.ruff]`, `[tool.mypy]`, `[tool.pytest.ini_options]`) comes from
+  Step 5 of `/python:init-dir`, which is the canonical configuration. The dev tools come from
+  Step 11. Do not keep a copy that is different.

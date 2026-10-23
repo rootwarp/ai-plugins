@@ -1,29 +1,29 @@
 ---
-description: 'Go architecture rules: SOLID principles, layering, dependency direction, interface boundaries. Use when designing packages, choosing where logic belongs, or reviewing whether a change respects the layers.'
+description: 'Go architecture rules: SOLID principles, layering, dependency direction, interface boundaries. Use when you design packages, decide where logic belongs, or review if a change respects the layers.'
 name: go-architecture
 ---
 
 # Architecture
 
-Clean / hexagonal architecture, adapted to idiomatic Go.
+This project uses clean or hexagonal architecture, adapted to idiomatic Go.
 
 ## Layers
 
-| Layer | Responsibility | May import |
+| Layer | Responsibility | Can import |
 |-------|----------------|------------|
 | Domain | Entities and business rules | nothing in the project |
 | Application | Use cases, orchestration, outbound ports | Domain |
-| Adapters | Inbound handlers (HTTP, gRPC, CLI); outbound clients | Application, Domain |
+| Adapters | Inbound handlers (HTTP, gRPC, CLI) and outbound clients | Application, Domain |
 | Infrastructure | Config, drivers, framework setup | any layer |
 
-Dependencies point inward. The domain has no framework, database, or transport imports, so its
-logic is testable without infrastructure.
+Dependencies point inward. The domain does not import a framework, a database, or a transport.
+Thus you can test its logic without infrastructure.
 
 ## Target Structure
 
-This is the shape for a service with real domain logic. A small tool or library starts with the
-minimal layout in the `go-project-layout` skill and grows into layers once a second adapter or a
-non-trivial business rule appears. Don't scaffold empty layers.
+This structure is for a service with real domain logic. A small tool or library starts with the
+minimal layout in the `go-project-layout` skill. Add layers when a second adapter or a
+non-trivial business rule appears. Do not make empty layers.
 
 ```text
 internal/
@@ -37,21 +37,25 @@ internal/
     └── config/
 ```
 
-Wire everything by hand in `cmd/<app>/main.go`: build the outbound adapters, pass them to the
-application constructors, and hand those to the inbound adapters. A DI framework or code
-generator isn't needed.
+Connect all the parts manually in `cmd/<app>/main.go`:
+
+1. Make the outbound adapters.
+2. Give them to the application constructors.
+3. Give the application services to the inbound adapters.
+
+You do not need a DI framework or a code generator.
 
 ## Interfaces and Dependencies
 
-- Accept interfaces, return concrete types. Inject dependencies through constructors
-  (`NewOrderService(repo OrderRepository)`) so required ones can't be forgotten.
-- Declare an interface in the package that consumes it: normally `application`, or `domain`
-  only when a domain service makes the call itself. Adapters import the port, never the
-  reverse.
-- Keep interfaces small (1-3 methods) and compose them (`UserReader` + `UserWriter` instead
-  of a fat `UserStore`).
-- Implementations honor the documented contract, not just the signature (an `io.Reader`
-  returns `io.EOF` at end and `n <= len(p)`).
+- Accept interfaces and return concrete types. Inject dependencies through constructors
+  (`NewOrderService(repo OrderRepository)`). Then a caller cannot forget a required dependency.
+- Declare an interface in the package that uses it. This is usually `application`. Use
+  `domain` only when a domain service makes the call itself. Adapters import the port. The
+  port never imports an adapter.
+- Keep interfaces small (1-3 methods) and compose them. Use `UserReader` and `UserWriter`, not
+  one large `UserStore`.
+- An implementation must obey the documented contract, not only the signature. For example, an
+  `io.Reader` returns `io.EOF` at the end, and `n <= len(p)`.
 
 ```go
 // application/ports.go: the port is declared where it is consumed
@@ -64,5 +68,9 @@ type UserRepository interface {
 var _ application.UserRepository = (*UserRepository)(nil)
 ```
 
-Watch for an anemic domain (entities with no behavior), infrastructure types leaking into the
-domain, god packages, and import cycles.
+Look for these problems:
+
+- An anemic domain (entities that have no behavior)
+- Infrastructure types in the domain
+- God packages
+- Import cycles

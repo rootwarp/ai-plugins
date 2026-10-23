@@ -1,7 +1,7 @@
 {
   "name": "python",
-  "version": "0.6.0",
-  "description": "Python development tools for Claude Code - pytest, ruff, mypy, uv and doc-lookup skills, code-style/architecture/layout/TDD/security/concurrency guidelines, and project initialization",
+  "version": "0.7.0",
+  "description": "Python development tools for Claude Code. Skills run pytest, Ruff, mypy, and uv, and look up documentation. Other skills give rules for code style, architecture, project layout, TDD, security, and concurrency. The /python:init-dir command initializes a new project.",
   "author": {
     "name": "rootwarp",
     "email": "rootwarp@gmail.com",

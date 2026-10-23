@@ -1,17 +1,18 @@
 ---
-description: 'Format Rust sources with cargo fmt. Use when asked to format Rust code.'
+description: 'Format Rust source files with cargo fmt. Use when the user asks you to format Rust code.'
 name: cargo-fmt
 ---
 
 # /cargo-fmt
 
-Format every crate in the workspace:
+Format all crates in the workspace:
 
 ```bash
 cargo fmt --all
 ```
 
-Check without writing (CI and the pre-commit gate):
+To check the format without a change to the files, use this command. CI and the pre-commit gate
+use it:
 
 ```bash
 cargo fmt --all --check

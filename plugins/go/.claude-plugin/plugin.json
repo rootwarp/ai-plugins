@@ -1,7 +1,7 @@
 {
   "name": "go",
-  "version": "0.8.0",
-  "description": "Go development tools for Claude Code - build, test, lint, format, module, and documentation lookup skills; architecture, code style, concurrency, security, TDD, and project layout guidance; and /go:init-dir project initialization",
+  "version": "0.9.0",
+  "description": "Go development tools for Claude Code. Skills build, test, lint, and format code, manage modules, and look up documentation. Other skills give rules for architecture, code style, concurrency, security, TDD, and project layout. The /go:init-dir command initializes a project.",
   "author": {
     "name": "rootwarp",
     "email": "rootwarp@gmail.com",

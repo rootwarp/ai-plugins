@@ -1,5 +1,5 @@
 ---
-description: 'Generate project docs with cargo doc and look up crate documentation on docs.rs. Use when verifying Rust APIs.'
+description: 'Generate project docs with cargo doc and look up crate documentation on docs.rs. Use when you must verify Rust APIs.'
 name: cargo-doc
 ---
 
@@ -7,25 +7,25 @@ name: cargo-doc
 
 ## Project Docs
 
-Document the project's own crates (the default); output lands in
+By default, generate docs for the crates of the project only. The output goes to
 `target/doc/<crate_ident>/index.html`:
 
 ```bash
 cargo doc --no-deps
 ```
 
-Drop `--no-deps` only when dependency docs are needed offline (much slower). Pass `--open` only
-when the user asks to view the docs in a browser.
+Remove `--no-deps` only if you need the docs of dependencies offline. This is much slower.
+Pass `--open` only if the user asks to see the docs in a browser.
 
-## Looking Up a Crate or std
+## Find Docs for a Crate or std
 
-Take the crate, optional version, and optional item from the request (`$ARGUMENTS` when invoked
-as a command) and WebFetch the page, asking for the overview, the requested item's signature and
-description, and examples.
+Get the crate, the optional version, and the optional item from the request. When the user
+starts this skill as a command, they are in `$ARGUMENTS`. Use WebFetch to get the page. Ask for
+the overview, the signature and description of the item, and examples.
 
-- Version: when the crate is already a dependency, use the version in `Cargo.lock`; otherwise
+- Version: If the crate is already a dependency, use the version in `Cargo.lock`. If not, use
   `latest`.
-- `{crate_ident}` is the crate name with `-` replaced by `_`.
+- `{crate_ident}` is the crate name with each `-` changed to `_`.
 
 | Target | URL |
 |--------|-----|

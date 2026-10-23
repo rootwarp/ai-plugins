@@ -30,7 +30,7 @@
       "name": "dev-team",
       "source": "./plugins/dev-team",
       "category": "project-management",
-      "tags": ["multi-agent", "team-orchestration", "dev-plan", "dev-run", "code-review", "security-audit", "bug-hunter", "tdd", "git-worktree"]
+      "tags": ["multi-agent", "team-orchestration", "dev-plan", "dev-run", "code-review", "security-audit", "bug-hunter", "tdd", "git-worktree", "ste", "simplified-technical-english"]
     }
   ]
 }

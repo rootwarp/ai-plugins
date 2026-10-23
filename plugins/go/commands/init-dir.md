@@ -1,42 +1,43 @@
 ---
-description: Initialize a Go project with standard directories, Makefile, .gitignore, and golangci-lint v2 config
+description: Initialize a Go project with standard directories, a Makefile, a .gitignore file, and a golangci-lint v2 config
 argument-hint: '[minimal|library|service] [app-name] [module-path]'
 allowed-tools: Bash(go mod init:*), Bash(go build:*), Bash(go vet:*), Bash(mkdir:*), Bash(touch:*), Bash(ls:*), Bash(tree:*), Bash(golangci-lint config verify:*), Bash(git remote get-url:*), Read, Write
 ---
 
 # /go:init-dir
 
-Initialize a Go project with directories, a Makefile, `.gitignore`, and a golangci-lint v2
+Initialize a Go project with directories, a Makefile, a `.gitignore` file, and a golangci-lint v2
 config.
 
 ## Step 0: Check Existing State
 
-Before creating anything, look for `go.mod`, `Makefile`, `.gitignore`, `.golangci.yml`, and
-`cmd/`, `internal/`, `pkg/`.
+Before you make files, look for `go.mod`, `Makefile`, `.gitignore`, `.golangci.yml`, `cmd/`,
+`internal/`, and `pkg/`.
 
-- If `go.mod` exists, skip Step 3 and reuse its module path (`module <path>` on the first line).
-- For each other file that already exists, ask the user whether to skip, merge, or overwrite it.
-  Never overwrite a file without an answer.
+- If `go.mod` exists, skip Step 3. Use its module path again (`module <path>` on the first line).
+- For each other file that exists, ask the user to select one action: skip, merge, or
+  overwrite. Do not overwrite a file without an answer.
 
 ## Step 1: Gather Information
 
-Ask the user (skip what `$ARGUMENTS` or Step 0 already answered):
+Ask the user these questions. Skip the questions that `$ARGUMENTS` or Step 0 answered.
 
 1. **Project type:**
-   - Minimal (recommended) - `cmd/` and `internal/`
-   - Library - package at the module root; `internal/` only when needed
-   - Full Service - `cmd/` plus the layered `internal/` from the `go-architecture` skill
+   - Minimal (recommended): `cmd/` and `internal/`
+   - Library: the package at the module root, and `internal/` only if necessary
+   - Full Service: `cmd/` and the layers of `internal/` from the `go-architecture` skill
 
-2. **Application name** (used for `cmd/<app-name>/` and binary name; libraries use the package
-   name instead)
+2. **Application name**: The name of `cmd/<app-name>/` and of the binary. A library uses the
+   package name.
 
-3. **Module path** (e.g., `github.com/username/project`; suggest one from `git remote get-url
-   origin` when available)
+3. **Module path**: For example, `github.com/username/project`. If
+   `git remote get-url origin` gives a URL, propose a path from it.
 
 ## Step 2: Create Directories
 
-Per the `go-project-layout` skill, create only directories that hold code now. The rest
-(`api/`, `configs/`, `deployments/`, ...) arrive with their first file.
+The `go-project-layout` skill gives this rule: make only the directories that hold code now.
+Make the other directories (`api/`, `configs/`, `deployments/`, and others) when their first
+file arrives.
 
 **Minimal Project:**
 
@@ -44,7 +45,7 @@ Per the `go-project-layout` skill, create only directories that hold code now. T
 mkdir -p cmd/<app-name> internal/<app-name>
 ```
 
-**Library Project:** no directories; the package lives at the module root (Step 4).
+**Library Project:** Make no directories. The package is at the module root (Step 4).
 
 **Full Service Project:**
 
@@ -54,18 +55,18 @@ mkdir -p cmd/<app-name> internal/domain internal/application internal/adapters
 
 ## Step 3: Initialize Go Module
 
-Skip if `go.mod` already exists.
+Skip this step if `go.mod` exists.
 
 ```bash
 go mod init <module-path>
 ```
 
-If it fails (invalid path, nested module), show the error and ask the user how to proceed
-before going further.
+If the command fails (for example, an invalid path or a nested module), show the error. Then
+ask the user what to do. Do not continue before the user answers.
 
 ## Step 4: Create Source Files
 
-For non-library projects, create `cmd/<app-name>/main.go`:
+For a project that is not a library, make `cmd/<app-name>/main.go`:
 
 ```go
 package main
@@ -74,15 +75,15 @@ func main() {
 }
 ```
 
-For library projects, create `<package-name>.go` at the module root:
+For a library project, make `<package-name>.go` at the module root:
 
 ```go
 // Package <package-name> ...
 package <package-name>
 ```
 
-Then add `.gitkeep` to each directory created in Step 2 that is still empty. Loop over just
-those directories; a tree-wide `find` would also write into `.git/` and unrelated folders.
+Then add `.gitkeep` to each directory from Step 2 that is empty. Use a loop on only those
+directories. A `find` on the full tree also writes into `.git/` and into unrelated folders.
 
 ```bash
 for d in <created-dirs>; do
@@ -92,8 +93,8 @@ done
 
 ## Step 5: Write Makefile
 
-Replace `<app-name>`. `fmt` uses `golangci-lint fmt` so formatting follows the formatters
-configured in Step 7.
+Replace `<app-name>`. The `fmt` target uses `golangci-lint fmt`. Thus it uses the formatters that
+Step 7 configures.
 
 ```makefile
 APP_NAME := <app-name>
@@ -134,7 +135,7 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 ```
 
-For library projects, use this Makefile instead:
+For a library project, use this Makefile:
 
 ```makefile
 GO := go
@@ -213,7 +214,7 @@ tmp/
 
 ## Step 7: Write .golangci.yml
 
-Use the golangci-lint v2 format and replace `<module-path>`:
+Use the golangci-lint v2 format. Replace `<module-path>`:
 
 ```yaml
 version: "2"
@@ -257,18 +258,22 @@ issues:
   max-same-issues: 0
 ```
 
-Non-obvious choices: `govet` drops `fieldalignment` (noisy, trades readability for bytes) and
-`shadow` (flags ordinary `err` reuse). The excluded `ST` checks are staticcheck's upstream
-defaults and overlap with `revive`. In v2, `staticcheck` absorbed `gosimple` and `stylecheck`,
-and `gofmt` / `goimports` sit under `formatters`, not `linters`.
+Some decisions in this config are not obvious:
 
-## Step 8: Verify and Display Result
+- `govet` disables `fieldalignment`. This check gives many findings, and it makes code less
+  readable to save bytes.
+- `govet` disables `shadow`. This check reports the usual reuse of `err`.
+- The upstream defaults of staticcheck exclude these `ST` checks. They also overlap with `revive`.
+- In v2, `staticcheck` includes `gosimple` and `stylecheck`.
+- In v2, `gofmt` and `goimports` are under `formatters`, not under `linters`.
+
+## Step 8: Verify and Show the Result
 
 ```bash
 go build ./...
 ```
 
-If `golangci-lint` is installed, also run `golangci-lint config verify`. If it's missing, tell
-the user rather than installing it unasked.
+If `golangci-lint` is installed, also run `golangci-lint config verify`. If it is not installed,
+tell the user. Do not install it without permission.
 
-Show the created structure with `tree` (or `ls -R`).
+Show the new structure with `tree` (or `ls -R`).

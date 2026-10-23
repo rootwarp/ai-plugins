@@ -1,14 +1,15 @@
 ---
-description: Initialize a Python project with uv, src layout, Ruff, mypy, and pytest
+description: Initialize a Python project with uv, a src layout, Ruff, mypy, and pytest
 ---
 
 # /python:init-dir
 
-Initialize a Python 3.11+ project with uv and modern tooling. The `pyproject.toml` tool
-configuration in Step 5 is the canonical one for this plugin; the other skills refer to it.
+Initialize a Python 3.11+ project with uv and modern tools. The `pyproject.toml` tool
+configuration in Step 5 is the canonical configuration for this plugin. The other skills refer
+to it.
 
-If a command fails, stop and show the user the error rather than retrying with different flags,
-deleting files, or installing tools yourself.
+If a command fails, stop and show the error to the user. Do not try again with different flags.
+Do not delete files, and do not install tools yourself.
 
 ## Step 1: Preflight
 
@@ -17,26 +18,27 @@ uv --version                                      # uv must be installed
 git rev-parse --is-inside-work-tree 2>/dev/null   # already inside a git repo?
 ```
 
-- **uv missing:** stop and point the user to
+- **uv is not installed:** Stop. Refer the user to
   <https://docs.astral.sh/uv/getting-started/installation/>.
-- **Target directory already contains a `pyproject.toml`:** stop and ask; `uv init` refuses to
-  run in an existing project.
-- **Inside a git repo:** pass `--vcs none` to `uv init` in Step 3 so no nested repo is created.
+- **The target directory already contains a `pyproject.toml`:** Stop and ask the user. `uv init`
+  does not run in an existing project.
+- **The directory is in a git repo:** Give `--vcs none` to `uv init` in Step 3. This prevents a
+  nested repo.
 
-## Step 2: Gather Information
+## Step 2: Get the Project Information
 
-Ask for whatever `$ARGUMENTS` did not answer:
+Ask the user for each item that `$ARGUMENTS` does not give:
 
-1. **Project type:** Application (recommended; `src/` layout with an entry point), Library
+1. **Project type:** Application (recommended, `src/` layout with an entry point), Library
    (`src/` layout), or Simple Script (flat layout, no build system, no entry point)
-2. **Project name** (package and directory name)
+2. **Project name** (the name of the package and of the directory)
 3. **License:** an SPDX expression such as `MIT` or `Apache-2.0`, or none
-4. **Features:** web framework (FastAPI / Flask / none), CLI framework (Typer / Click / none;
+4. **Features:** web framework (FastAPI / Flask / none), CLI framework (Typer / Click / none,
    Application only), database (SQLAlchemy / asyncpg / none), type checker (mypy / pyright)
 
 ## Step 3: Create the Project with uv
 
-uv creates the layout, so nothing has to be moved or deleted afterwards:
+uv creates the layout. Thus, you do not have to move or delete files after this step:
 
 ```bash
 uv init --package --build-backend hatch <project-name>   # Application
@@ -53,24 +55,24 @@ touch tests/__init__.py tests/conftest.py
 touch src/<package_name>/py.typed        # Application only; uv adds it for a Library
 ```
 
-A Simple Script keeps uv's `main.py` as its entry point. Create `docs/` with the first document,
-not before.
+A Simple Script keeps the `main.py` from uv as its entry point. Create `docs/` when you add the
+first document, not before.
 
 ## Step 5: Configure pyproject.toml
 
-Keep what uv generated in `[project]` (`name`, `version`, `readme`, `requires-python`, `authors`)
-along with `[project.scripts]` and `[build-system]`; raise `requires-python` to `>=3.11` if uv
-picked something older. Set only the license:
+Keep the `[project]` fields that uv made (`name`, `version`, `readme`, `requires-python`,
+`authors`). Also keep `[project.scripts]` and `[build-system]`. If uv selected a version older
+than 3.11 for `requires-python`, change it to `>=3.11`. Set only the license:
 
 ```toml
 [project]
 license = "MIT"          # the SPDX expression from Step 2; omit when "none"
 ```
 
-Don't add `License ::` classifiers: PEP 639 supersedes them, and setuptools 77+ refuses to build
-when they appear next to a `license` expression.
+Do not add `License ::` classifiers. PEP 639 replaces them. Also, setuptools 77+ does not build
+the project if they are present with a `license` expression.
 
-Append the tool configuration:
+Add the tool configuration at the end of the file:
 
 ```toml
 [tool.ruff]
@@ -101,12 +103,14 @@ markers = [
 
 Variants:
 
-- **Simple Script:** omit `[tool.ruff.lint.isort]` and drop `--cov=<package_name>` from
+- **Simple Script:** Do not add `[tool.ruff.lint.isort]`. Remove `--cov=<package_name>` from
   `addopts`.
-- **pyright chosen:** replace `[tool.mypy]` with `[tool.pyright]` / `typeCheckingMode = "strict"`.
-- **Async project** (FastAPI or asyncpg): add `asyncio_mode = "auto"` to
-  `[tool.pytest.ini_options]` and `pytest-asyncio` to the dev tools in Step 11.
-- **Pydantic in use** (FastAPI pulls it in): add `plugins = ["pydantic.mypy"]` to `[tool.mypy]`.
+- **The user selected pyright:** Replace `[tool.mypy]` with `[tool.pyright]` /
+  `typeCheckingMode = "strict"`.
+- **Async project** (FastAPI or asyncpg): Add `asyncio_mode = "auto"` to
+  `[tool.pytest.ini_options]`. Add `pytest-asyncio` to the dev tools in Step 11.
+- **The project uses Pydantic** (FastAPI includes it): Add `plugins = ["pydantic.mypy"]` to
+  `[tool.mypy]`.
 
 ## Step 6: Add Selected Dependencies
 
@@ -117,7 +121,7 @@ uv add sqlalchemy alembic            # SQLAlchemy
 uv add asyncpg                       # asyncpg
 ```
 
-**Typer** (Application): `uv add typer`, then create `src/<package_name>/cli.py`:
+**Typer** (Application): Run `uv add typer`. Then create `src/<package_name>/cli.py`:
 
 ```python
 """Command-line interface."""
@@ -133,7 +137,7 @@ def main() -> None:
     typer.echo("Hello, World!")
 ```
 
-**Click** (Application): `uv add click`, then create `src/<package_name>/cli.py`:
+**Click** (Application): Run `uv add click`. Then create `src/<package_name>/cli.py`:
 
 ```python
 """Command-line interface."""
@@ -147,7 +151,8 @@ def main() -> None:
     click.echo("Hello, World!")
 ```
 
-With Typer or Click, replace uv's single `[project.scripts]` entry rather than adding a second:
+With Typer or Click, replace the one `[project.scripts]` entry that uv made. Do not add a second
+entry:
 
 ```toml
 [project.scripts]
@@ -166,8 +171,8 @@ __version__ = "0.1.0"
 ```
 
 **`src/<package_name>/main.py`** (Application without a CLI framework). `uv init --package`
-points `[project.scripts]` at `<package_name>:main`; since `main()` moves here, change that
-entry to `<project-name> = "<package_name>.main:main"`.
+sets `[project.scripts]` to `<package_name>:main`. Because `main()` moves to this file, change
+that entry to `<project-name> = "<package_name>.main:main"`.
 
 ```python
 """Main entry point."""
@@ -182,7 +187,8 @@ if __name__ == "__main__":
     main()
 ```
 
-**Simple Script:** keep uv's `main.py`, annotated as `def main() -> None:` so strict mypy passes.
+**Simple Script:** Keep the `main.py` from uv. Annotate it as `def main() -> None:`, so that
+strict mypy passes.
 
 ## Step 8: Create Test Files
 
@@ -231,8 +237,8 @@ def test_main_prints_greeting(capsys: pytest.CaptureFixture[str]) -> None:
 
 ## Step 9: Update .gitignore
 
-`uv init` already wrote a `.gitignore` unless `--vcs none` was passed. Append only the entries it
-lacks, or create the file:
+`uv init` writes a `.gitignore`, but not when you give `--vcs none`. Add only the entries that
+are not in the file. If the file does not exist, create it:
 
 ```gitignore
 # Byte-compiled / optimized / DLL files
@@ -271,12 +277,13 @@ coverage.xml
 
 ## Step 10: Check .python-version
 
-`uv init` writes `.python-version` (read by uv and pyenv). Keep it consistent with
-`requires-python`; pin another interpreter with `uv python pin 3.12`.
+`uv init` writes `.python-version`. uv and pyenv read this file. Make sure that it agrees with
+`requires-python`. To pin a different interpreter, run `uv python pin 3.12`.
 
 ## Step 11: Install Dev Tools
 
-Swap `mypy` for `pyright` if it was chosen, and add `pytest-asyncio` for an async project:
+If the user selected `pyright`, use it in place of `mypy`. For an async project, add
+`pytest-asyncio`:
 
 ```bash
 uv add --dev pytest pytest-cov ruff mypy
@@ -285,8 +292,8 @@ uv sync
 
 ## Step 12: Verify and Show the Result
 
-Show the structure with `tree` or `ls -la`, then run the initial checks (`mypy .` for a Simple
-Script):
+Show the structure with `tree` or `ls -la`. Then run the initial checks. For a Simple Script,
+run `mypy .`:
 
 ```bash
 uv run ruff format .

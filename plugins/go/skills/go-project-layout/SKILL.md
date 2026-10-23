@@ -1,5 +1,5 @@
 ---
-description: 'Go project layout: package and directory structure, cmd and internal placement. Use when adding a package or setting up a project.'
+description: 'Go project layout: package and directory structure, cmd and internal placement. Use when you add a package or set up a project.'
 name: go-project-layout
 ---
 
@@ -7,19 +7,19 @@ name: go-project-layout
 
 Follow the official [Organizing a Go module](https://go.dev/doc/modules/layout) guide.
 [golang-standards/project-layout](https://github.com/golang-standards/project-layout) is not an
-official standard. Borrow its support directories (`api/`, `web/`, `configs/`, `scripts/`,
-`build/`, `deployments/`, `test/`, `docs/`, `tools/`, `examples/`) only when a large service
+official standard. Use its support directories (`api/`, `web/`, `configs/`, `scripts/`,
+`build/`, `deployments/`, `test/`, `docs/`, `tools/`, `examples/`) only if a large service
 needs them.
 
 ## Rules
 
-- `cmd/<app>/main.go` per executable, kept thin: it parses config, wires dependencies, and
-  calls into `internal/`.
-- `internal/` by default for private code.
-- A library exposes its package at the module root. Use `pkg/` only when there are several public
-  packages and a root package isn't enough.
-- No `src/` directory; it isn't idiomatic Go.
-- Start minimal and add a directory when its first file arrives, not preemptively.
+- Give each executable a `cmd/<app>/main.go`. Keep it small: it reads the config, connects the
+  dependencies, and calls code in `internal/`.
+- By default, put private code in `internal/`.
+- A library puts its package at the module root. Use `pkg/` only if there are many public
+  packages and a root package is not sufficient.
+- Do not make a `src/` directory. It is not idiomatic Go.
+- Start with a minimal structure. Add a directory when its first file arrives, not before.
 
 ## Starting Structures
 
@@ -44,5 +44,5 @@ project/
 └── README.md
 ```
 
-A service with real domain logic grows `internal/` into the layers in the `go-architecture`
-skill.
+For a service with real domain logic, divide `internal/` into the layers in the
+`go-architecture` skill.

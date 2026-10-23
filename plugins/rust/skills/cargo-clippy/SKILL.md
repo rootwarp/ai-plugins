@@ -1,22 +1,22 @@
 ---
-description: 'Run Clippy lints and fix warnings. Use when asked to lint Rust code.'
+description: 'Run Clippy lints and fix the warnings. Use when the user asks you to lint Rust code.'
 name: cargo-clippy
 ---
 
 # /cargo-clippy
 
-Run Clippy and fix what it reports.
+Run Clippy and fix the problems that it reports.
 
 ```bash
 cargo clippy
 ```
 
-The pre-commit gate (the form the `rust-code-style` skill requires) covers every target and
-feature and denies warnings:
+The pre-commit gate uses the form that the `rust-code-style` skill requires. It covers all
+targets and all features, and it makes warnings into errors:
 
 ```bash
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-`cargo clippy --fix` applies the machine-applicable suggestions. It refuses a dirty tree, so
-commit or stash first (or pass `--allow-dirty` when the user agrees).
+`cargo clippy --fix` applies the machine-applicable suggestions. It does not run on a dirty
+tree. Commit or stash the changes first. If the user agrees, you can pass `--allow-dirty`.

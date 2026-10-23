@@ -1,5 +1,5 @@
 ---
-description: 'Run Go tests with coverage via go test. Use when asked to run or debug Go tests.'
+description: 'Run Go tests with coverage through go test. Use when the user asks you to run or debug Go tests.'
 name: go-test
 allowed-tools: Bash(go test:*), Bash(go tool cover:*), Read
 ---
@@ -12,11 +12,15 @@ Run the tests with the race detector and coverage:
 go test -race -cover ./...
 ```
 
-`-race` needs cgo and a C compiler. If it fails with a cgo error (e.g. `-race requires cgo`),
-rerun without `-race` and tell the user the race detector was skipped.
+`-race` needs cgo and a C compiler. If the command fails with a cgo error (for example
+`-race requires cgo`), run it again without `-race`. Then tell the user that the race detector
+did not run.
 
-Useful variants: `-v` for per-test output, `-run '^TestName$' ./path/to/pkg` for one test, and
-`-coverprofile=coverage.out` followed by `go tool cover -func=coverage.out` for per-function
-coverage.
+These variants are useful:
 
-On failures, find the root cause and propose the fix.
+- `-v` shows the output of each test.
+- `-run '^TestName$' ./path/to/pkg` runs one test.
+- `-coverprofile=coverage.out`, then `go tool cover -func=coverage.out`, shows the coverage of
+  each function.
+
+If a test fails, find the root cause and propose a fix.

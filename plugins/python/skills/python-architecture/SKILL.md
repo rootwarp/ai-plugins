@@ -1,29 +1,30 @@
 ---
-description: 'Python architecture rules: SOLID principles, layering, dependency direction, protocol boundaries. Use when designing modules or packages, choosing where logic belongs, or reviewing whether a change respects the layers.'
+description: 'Python architecture rules: SOLID principles, layers, dependency direction, and protocol boundaries. Use when you design modules or packages, decide where logic belongs, or review if a change respects the layers.'
 name: python-architecture
 ---
 
 # Architecture
 
-Clean / hexagonal architecture, expressed with Python's `Protocol`s and constructor injection.
+Use a clean (hexagonal) architecture. Express it with Python `Protocol` classes and constructor
+injection.
 
 ## Layers
 
-| Layer | Responsibility | May import |
+| Layer | Responsibility | Can import |
 |-------|----------------|------------|
 | Domain | Entities, value objects, business rules | Nothing outside the domain |
-| Application | Use cases; declares the ports it needs | Domain |
-| Adapters | HTTP/CLI handlers (inbound), DB/API clients (outbound) | Application, Domain |
-| Infrastructure | Config loading, wiring, framework setup | All layers |
+| Application | Use cases and the ports that they need | Domain |
+| Adapters | HTTP and CLI handlers (inbound), DB and API clients (outbound) | Application, Domain |
+| Infrastructure | Configuration loading, wiring, framework setup | All layers |
 
-Dependencies point inward. The domain stays free of frameworks, I/O, and Pydantic, so its rules
-are testable without infrastructure.
+Dependencies point inward. The domain does not use frameworks, I/O, or Pydantic. Thus, you can
+test its rules without infrastructure.
 
 ## Package Structure
 
-This is the target for a service with real domain logic. A small tool or library starts with the
-minimal layout in the `python-project-layout` skill and grows into layers when a second adapter
-or a non-trivial business rule appears; don't scaffold empty layers.
+This structure is the target for a service with real domain logic. A small tool or library
+starts with the minimal layout in the `python-project-layout` skill. Add layers when a second
+adapter or a non-trivial business rule appears. Do not create empty layers.
 
 ```text
 src/mypackage/
@@ -42,16 +43,17 @@ src/mypackage/
 
 ## Ports and Injection
 
-- Declare a port where it is consumed (normally `application/ports.py`; the domain only when a
-  domain service itself makes the call). Adapters import the port, never the reverse.
-- Keep protocols small (1-3 methods) and compose larger ones from them (`UserReader` +
-  `UserWriter` rather than a fat `UserStore`). Implementations honor the documented contract,
-  not just the signatures.
-- Extend by adding a new implementation of an existing protocol rather than editing callers.
+- Declare a port in the module that uses it. Usually this module is `application/ports.py`.
+  Declare the port in the domain only when a domain service itself makes the call. Adapters
+  import the port. The port never imports an adapter.
+- Keep protocols small (1-3 methods). Make larger protocols from small ones: use `UserReader` and
+  `UserWriter`, not one large `UserStore`. An implementation must obey the documented contract,
+  not only the signatures.
+- To extend behavior, add a new implementation of an existing protocol. Do not edit the callers.
 - Inject dependencies through `__init__` parameters. Only the composition root
-  (`infrastructure/container.py` or `main`) constructs concrete adapters.
-- Use dataclasses for domain types; keep Pydantic at the adapter boundary (request and response
-  models, settings) and map to domain types there.
+  (`infrastructure/container.py` or `main`) creates concrete adapters.
+- Use dataclasses for domain types. Use Pydantic only at the adapter boundary (request models,
+  response models, and settings), and convert to domain types there.
 
 ```python
 # application/ports.py
@@ -69,4 +71,5 @@ class PostgresUserRepository:
     async def find_by_id(self, id: str) -> User | None: ...
 ```
 
-Watch for circular imports between modules; they usually mean a dependency points the wrong way.
+Look for circular imports between modules. Usually, a circular import shows that a dependency
+points in the wrong direction.

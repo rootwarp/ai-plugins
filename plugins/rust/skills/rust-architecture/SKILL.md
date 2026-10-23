@@ -1,26 +1,27 @@
 ---
-description: 'Rust architecture rules: SOLID principles, layering, dependency direction, trait boundaries. Use when designing modules or crates, choosing where logic belongs, or reviewing whether a change respects the layers.'
+description: 'Rust architecture rules: SOLID principles, layers, dependency direction, and trait boundaries. Use when you design modules or crates, when you decide where logic goes, or when you review if a change obeys the layers.'
 name: rust-architecture
 ---
 
 # Architecture
 
-Clean / Hexagonal Architecture, expressed with Rust's traits and ownership.
+This skill applies Clean Architecture and Hexagonal Architecture with the traits and the
+ownership model of Rust.
 
 ## Layers
 
-| Layer | Responsibility | May depend on |
+| Layer | Responsibility | Can depend on |
 |-------|----------------|---------------|
 | Domain | Entities and business rules | Nothing (no framework crates) |
 | Application | Use cases, orchestration, outbound port traits | Domain |
-| Adapters | HTTP/gRPC/CLI handlers (inbound), DB/API clients (outbound) | Application, Domain |
+| Adapters | HTTP, gRPC, and CLI handlers (inbound), DB and API clients (outbound) | Application, Domain |
 | Infrastructure | Config loading, wiring, runtime setup | All layers |
 
-Dependencies point inward only, and modules never import each other in a cycle.
+Dependencies point only inward. Modules never import each other in a cycle.
 
-This is the target for a service with real domain logic. A small tool or library starts with the
-minimal layout in `rust-project-layout` and grows into layers when a second adapter or a
-non-trivial business rule appears. Don't scaffold empty layers.
+This structure is the target for a service with real domain logic. A small tool or library
+starts with the minimal layout in `rust-project-layout`. Add layers when a second adapter or a
+non-trivial business rule appears. Do not make empty layers.
 
 ```text
 src/
@@ -41,22 +42,25 @@ Module files use the `name.rs` + `name/` form (see `rust-project-layout`).
 
 ## Trait Boundaries
 
-- Declare a port trait in the module that consumes it, normally `application` (`domain` only
-  when a domain service itself makes the call). Adapters import the port, never the reverse.
-- Keep traits to 1-3 methods. Combine them with supertraits
-  (`trait UserRepository: UserReader + UserWriter {}`) instead of growing one fat trait.
-- Inject dependencies through constructors, as generic bounds (`UserService<R: UserRepository>`)
-  by default or trait objects (`Arc<dyn UserRepository>`) when you need runtime selection or
-  heterogeneous collections.
-- Implementations honor the trait's documented contract, so any one can be substituted (a
-  `Reader` returns `Ok(0)` at EOF and never more than `buf.len()`).
-- Extend behavior with a new implementation of an existing trait, not by editing callers.
+- Declare a port trait in the module that uses it. This is usually `application`. Use
+  `domain` only when a domain service itself makes the call. Adapters import the port. The port
+  never imports an adapter.
+- Keep each trait to 1-3 methods. Combine traits with supertraits
+  (`trait UserRepository: UserReader + UserWriter {}`). Do not make one trait larger and larger.
+- Inject dependencies through constructors. By default, use generic bounds
+  (`UserService<R: UserRepository>`). Use trait objects (`Arc<dyn UserRepository>`) when you
+  need selection at runtime or heterogeneous collections.
+- Each implementation obeys the documented contract of its trait, so you can substitute any
+  implementation for another. For example, a `Reader` returns `Ok(0)` at EOF and never returns
+  more than `buf.len()`.
+- To extend behavior, write a new implementation of a trait that exists. Do not change the
+  callers.
 
 ## Async Ports
 
-Native `async fn` in traits (Rust 1.75+) needs no macro for generic injection. Declare methods as
-`fn ... -> impl Future<Output = ...> + Send` so callers can spawn the futures on a
-multi-threaded runtime; implementations may still write plain `async fn`:
+Native `async fn` in traits (Rust 1.75+) does not need a macro for generic injection. Declare
+methods as `fn ... -> impl Future<Output = ...> + Send`. Then callers can spawn the futures on a
+multi-threaded runtime. Implementations can still use plain `async fn`:
 
 ```rust
 // application/ports.rs
@@ -72,5 +76,5 @@ impl UserRepository for PostgresUserRepository {
 }
 ```
 
-Native async traits are not dyn-compatible. If you need `Box<dyn …>` or `Arc<dyn …>`, annotate
-the trait and its impls with `#[async_trait::async_trait]` instead.
+Native async traits are not dyn-compatible. If you need `Box<dyn …>` or `Arc<dyn …>`, put
+`#[async_trait::async_trait]` on the trait and on its impls.
